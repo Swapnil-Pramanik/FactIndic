@@ -1,6 +1,17 @@
 # FactIndic: Do code-mixed inputs make LLM summaries lose or invent facts?
 
-*Final version (Day 5). Result numbers in section 3 come from `results/metrics.csv`; error-tag counts in section 5 come from `results/error_tag_counts.csv`, checklist-quality counts from `results/checklist_check.csv`; stretch numbers in section 6 come from `results/stretch_metrics.csv` and `results/scale/size_stretch_diffs.csv`; model-size and Gemma numbers in sections 7 and 8 come from `results/scale/size_metrics.csv`, `size_stretch_metrics.csv`, `size_stretch_diffs.csv` and `size_mixing_diffs.csv`; NLI numbers in section 9 come from `results/nli_validation.csv`, `nli_metrics.csv` and `nli_diffs.csv`. All intervals are paired 95% bootstrap intervals over the 100 articles (2,000 resamples, seeded).*
+*Final version (Day 5). Result numbers in section 3 come from `results/metrics.csv`; error-tag counts in section 5 come from `results/error_tag_counts.csv`, checklist-quality counts from `results/checklist_check.csv`; stretch numbers in section 6 come from `results/stretch_metrics.csv` and `results/scale/size_stretch_diffs.csv`; model-size and Gemma numbers in sections 7 and 8 come from `results/scale/size_metrics.csv`, `size_stretch_metrics.csv`, `size_stretch_diffs.csv` and `size_mixing_diffs.csv`; NLI numbers in section 9 come from `results/nli_validation.csv`, `nli_metrics.csv` and `nli_diffs.csv`; ROUGE and BERTScore numbers in section 10 come from `results/content_metrics.csv` and `content_diffs.csv`. All intervals are paired 95% bootstrap intervals over the 100 articles (2,000 resamples, seeded).*
+
+## Summary of findings
+
+- **Setup.** 100 BBC Hindi news articles (XL-Sum), made progressively code-mixed with English (0-80% of eligible nouns and adjectives; up to 18.6% of all words). Summarised by five open LLMs (Llama 3.2 1B/3B, Llama 3.1 8B, Gemma 2 2B/9B) with a plain prompt and a fact-checklist prompt: 5,400 summaries in all.
+- **Facts are not lost, but wrong facts increase.** Fact recall stays flat with mixing for every model (0.27-0.33 with the plain prompt). Unsupported facts per summary rise with mixing for all three Llama models (Llama 1B 0.16 -> 0.38; +0.22, 95% interval 0.07 to 0.39) but not clearly for Gemma 2.
+- **Bigger helps, but is not immune.** Llama 8B makes far fewer wrong facts (0.06 per summary unmixed) yet mixing still roughly triples them. Llama 3B is no better than 1B.
+- **The fact-checklist prompt raises recall at every level for every model** (up to +0.14 for Gemma 2 9B) and improves number recall most (Llama 1B at level 80: 0.49 vs 0.33). Best combination: Gemma 2 9B with the checklist, F1 0.56-0.58.
+- **English fact words hurt most.** Switching the fact words themselves to English (stretch) costs Llama 1B 0.044 recall and 0.053 precision against random mixing of the same number of words; the checklist prompt closes most of that gap. Most of the precision loss is names respelled in Devanagari, not invented facts.
+- **Meaning check (NLI).** An automatic sentence-level entailment check agrees moderately with the hand tags (AUC 0.74). It shows mixing doubles summaries with a contradicted sentence for Llama 1B (19% -> 41%), not clearly for larger models. The checklist adds facts but does not fix who-did-what errors.
+- **Content vs human summaries (ROUGE/BERTScore).** Unmixed, all models beat the Lead-3 baseline on ROUGE-1 (0.27-0.30 vs 0.26). Mixing lowers ROUGE-1 clearly for Llama 1B and 3B (-0.03) and not clearly for the rest; the checklist prompt does not change ROUGE.
+- **Main error type in hand tags:** entity and role swaps (right names, wrong roles), which string-matching metrics cannot see.
 
 ## 1. Question
 
@@ -259,7 +270,44 @@ AUC is the chance that a summary with the error scores lower than one without it
 3. **The checklist adds facts, not meaning.** Checklist vs plain NLI support is never clearly different (all intervals include zero). Contradictions go both ways: fewer with the checklist for Llama 3B at level 0 (-0.10, -0.18 to -0.03), more for Llama 8B at level 80 (+0.09, 0.03 to 0.16). The checklist makes the model *mention* more facts (higher recall in every section), but does not stop it from getting their relationships wrong.
 4. **NLI support itself barely moves with mixing.** It stays at 0.70-0.84 for every model and level. Only Gemma 2B's plain support falls clearly (-0.077, -0.143 to -0.008). About a fifth to a quarter of all summary sentences are not judged entailed even without mixing, because NLI is strict with paraphrase and with sentences that combine facts from distant parts of the article.
 
-## 10. Limitations
+## 10. Content preservation against the human reference summary (ROUGE, BERTScore)
+
+**Why.** Sections 3-9 compare a summary with its article. Summarisation papers also compare it with a human-written reference summary, and the brief asks for *content* preservation. Every XL-Sum article comes with the BBC's own one-line summary.
+
+**Method** (`content.py`).
+- **ROUGE-1, ROUGE-2, ROUGE-L** (F1): overlap of words, word pairs and the longest common word sequence with the reference. Hindi has no stemmer in `rouge_score`, and its default tokenizer deletes every non-Latin character, so text is normalised exactly as for fact matching (Unicode, digits, nukta, punctuation) and split on spaces.
+- **BERTScore** (F1): similarity of contextual word embeddings from `xlm-roberta-large`, so paraphrases still score. Scores are raw (not rescaled), so they sit in a narrow 0.87-0.89 band; only differences matter.
+- Same 3-sentence cut as everywhere else. **Baselines:** Lead-1 and Lead-3, the article's first one or three sentences.
+
+**Results** (plain prompt; `results/content_metrics.csv`):
+
+| Model | ROUGE-1 L0 -> L80 | ROUGE-2 L0 -> L80 | ROUGE-L L0 -> L80 | BERTScore L0 -> L80 |
+|---|---|---|---|---|
+| Llama 1B | 0.272 -> 0.241 | 0.080 -> 0.065 | 0.185 -> 0.169 | 0.878 -> 0.869 |
+| Llama 3B | 0.296 -> 0.270 | 0.100 -> 0.082 | 0.219 -> 0.202 | 0.884 -> 0.881 |
+| Llama 8B | 0.292 -> 0.279 | 0.094 -> 0.085 | 0.212 -> 0.198 | 0.883 -> 0.882 |
+| Gemma 2B | 0.282 -> 0.268 | 0.090 -> 0.077 | 0.206 -> 0.195 | 0.879 -> 0.878 |
+| Gemma 9B | 0.299 -> 0.293 | 0.107 -> 0.102 | 0.215 -> 0.206 | 0.887 -> 0.885 |
+| Lead-1 (baseline) | 0.235 | 0.067 | 0.184 | 0.880 |
+| Lead-3 (baseline) | 0.255 | 0.074 | 0.166 | 0.874 |
+
+Effect of mixing on ROUGE-1 (level 80 minus level 0, same article, 95% interval):
+
+| Model | Plain | Checklist |
+|---|---|---|
+| Llama 1B | -0.032 (-0.046 to -0.018) | -0.024 (-0.039 to -0.011) |
+| Llama 3B | -0.026 (-0.041 to -0.011) | -0.020 (-0.036 to -0.004) |
+| Llama 8B | -0.012 (-0.029 to +0.005) | -0.024 (-0.042 to -0.006) |
+| Gemma 2B | -0.013 (-0.030 to +0.002) | -0.014 (-0.027 to +0.001) |
+| Gemma 9B | -0.006 (-0.018 to +0.005) | -0.009 (-0.022 to +0.004) |
+
+**Observations:**
+1. **Without mixing, every model beats the Lead baselines on ROUGE-1** (0.27-0.30 vs 0.235 and 0.255); at level 80, Llama 1B (0.241) falls below Lead-3. On ROUGE-L and BERTScore, Llama 1B is only level with Lead-1 even unmixed. The larger models are closer to the reference than Llama 1B (ROUGE-1 0.28-0.30 vs 0.27). Absolute ROUGE is low because the reference is a single sentence and the summaries are zero-shot and up to three sentences long.
+2. **Mixing moves summaries away from the reference, most for the small Llama models.** ROUGE-1 falls by 0.032 (Llama 1B) and 0.026 (Llama 3B) with the plain prompt, both clear of zero; for Llama 8B and both Gemma models the plain-prompt drop is within noise. BERTScore shows the same order (1B -0.009, 3B -0.003, both clear; the rest within noise). This mirrors the fact-level and NLI results: small Llama models are the most affected, Gemma 2 the least.
+3. **The checklist prompt does not change content overlap.** Checklist minus plain is within noise for ROUGE-1 and ROUGE-L at every model and level tested (0, 40, 80), and for ROUGE-2 except one borderline cell (Llama 1B level 40, -0.007, -0.014 to -0.000). The only other clear differences are tiny BERTScore drops (Gemma 9B at all three levels, -0.003 to -0.004; Llama 3B level 40, -0.004; Llama 1B level 0, -0.002). So the checklist's recall gains come from keeping specific names and numbers, not from writing summaries closer to the human one.
+4. **English fact words (stretch) barely change content overlap.** Targeted minus random is within noise everywhere except Llama 1B plain ROUGE-1 (-0.012, -0.022 to -0.002) and Gemma 9B plain BERTScore (-0.002).
+
+## 11. Limitations
 
 - **Machine-made mixing.** The mixed text is generated by dictionary lookup, not written by people, so it is not natural Hinglish.
   - Context-free lookup picks some wrong senses: हवाई -> "hawaii", विराम -> "comma".
@@ -273,4 +321,184 @@ AUC is the chance that a summary with the error scores lower than one without it
   - A fact restated in different words, or with a spelling variant (अमेरिका vs BBC's अमरीका), counts as missed or unsupported.
   - Of 185 unsupported entities, 71 are close spellings of a phrase in the article. Some are real name distortions, others just grammar.
 - **Cutting summaries.** Cutting to 3 sentences enforces the prompt's length for everyone, but it means the scores ignore what the model wrote after that point.
+- **ROUGE is not comparable with published XL-Sum scores.** We use our own Hindi tokenisation (normalised whitespace words), not XL-Sum's multilingual ROUGE package, and score zero-shot summaries cut to 3 sentences against a 1-sentence reference. The numbers are for comparing our conditions with each other and with the Lead baselines only.
 - **Limited significance testing.** Paired bootstrap intervals cover levels 0 and 80, checklist vs plain, and the stretch. Levels 20 and 60 are not tested, and no correction is made for the many comparisons, so a single interval that only just clears zero should be read with care.
+
+## 12. Reproducibility
+
+**Pipeline.**
+
+```
+XL-Sum Hindi test split (8,847 articles)
+  -> keep 150-600 words, draw 100 (seed 42)                         extract.py
+  -> fact checklist: IndicNER entities + regex numbers/dates          extract.py
+  -> code-mixing at 0/20/40/60/80% (MUSE dictionary, Stanza POS)      mix.py
+     + stretch: targeted vs random mixing at equal word counts        mix.py --stretch
+  -> summaries: 5 LLMs x 2 prompts, 4-bit, greedy, Kaggle T4          generate.py
+  -> cut to first 3 sentences
+       -> fact recall / precision / F1 vs checklist and article       score.py
+       -> sentence-level NLI vs the article                           verify.py
+       -> ROUGE / BERTScore vs the human reference summary            content.py
+  -> paired bootstrap 95% intervals over articles                     score.py (paired_diffs)
+```
+
+**Settings.**
+
+| Setting | Value |
+|---|---|
+| Dataset | `csebuetnlp/xlsum`, Hindi, test split; 100 articles of 150-600 words, seed 42 |
+| Fact extraction | `ai4bharat/IndicNER` (entities); regular expressions for numbers and dates |
+| Mixing | MUSE hi-en dictionary; Stanza 1.15 POS tags (NOUN, ADJ only); nested levels 0/20/40/60/80 |
+| Models | `meta-llama/Llama-3.2-1B-Instruct` (main), `Llama-3.2-3B-Instruct`, `Llama-3.1-8B-Instruct`, `google/gemma-2-2b-it`, `google/gemma-2-9b-it` |
+| Quantisation | 4-bit NF4 weights (bitsandbytes 0.50.2); float16 compute for Llama, float32 for Gemma 2 |
+| Decoding | greedy, at most 200 new tokens; Llama chat-template date pinned to 01 Nov 2026 |
+| Hardware | Kaggle NVIDIA T4 (16 GB); about 15 GPU-hours of generation for all 5,400 summaries |
+| Software (GPU) | torch 2.11.0+cu130, transformers 5.22.2, accelerate 1.15.0 |
+| Scoring | first 3 sentences; whole-word matching after Unicode, digit, nukta and punctuation normalisation |
+| NLI | `MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7`; 4-sentence windows, top 3 by word overlap, threshold 0.5 |
+| Content | `rouge-score` 0.1.2 with a whitespace tokenizer over the same normalisation; `bert-score` 0.3.13 with `xlm-roberta-large` (raw F1) |
+| Statistics | paired bootstrap over the 100 articles, 2,000 resamples, seed 42, percentile 95% intervals |
+| Determinism | a rerun of 100 summaries reproduced them word for word |
+
+Summary counts: Llama 1B main 1,000 (5 levels x 2 prompts x 100) and stretch 400; each other model 600 (levels 0/40/80) and stretch 400. Total 5,400. Generation time per model: Llama 1B 2.6 h, 3B 2.0 h, 8B 2.6 h, Gemma 2B 2.5 h, Gemma 9B 5.3 h (sum of per-summary times, excluding model loading).
+
+## Appendix A. The two prompts
+
+Both prompts are one user message in English (a 1B model follows English instructions far more reliably than Hindi ones); the summary is requested in Hindi. Source: `prompts.py`.
+
+**Plain:**
+
+```
+Summarise the following news article in 2-3 sentences. Write the summary in Hindi, in Devanagari script. Output only the summary.
+
+Article:
+<article text, mixed at the given level>
+```
+
+**Checklist (factuality-aware):**
+
+```
+Summarise the following news article in 2-3 sentences. Write the summary in Hindi, in Devanagari script. Output only the summary.
+
+Keep these key facts from the article exactly as they are written:
+- Names, places and organisations: <entities, comma-separated>
+- Numbers: <numbers>
+- Dates: <dates>
+
+Article:
+<article text, mixed at the given level>
+```
+
+Empty categories are left out. The checklist always lists the facts as written in the original (level-0) Hindi article.
+
+## Appendix B. Full results for all five models (levels 0/40/80)
+
+Source: `results/scale/size_metrics.csv`. Unsup. = unsupported facts per summary.
+
+| Model | Level | Prompt | Recall | Recall (numbers) | Precision | F1 | Unsup. |
+|---|---|---|---|---|---|---|---|
+| Llama 1B | 0 | plain | 0.306 | 0.294 | 0.969 | 0.446 | 0.16 |
+| Llama 1B | 0 | checklist | 0.344 | 0.383 | 0.976 | 0.482 | 0.12 |
+| Llama 1B | 40 | plain | 0.327 | 0.333 | 0.957 | 0.461 | 0.24 |
+| Llama 1B | 40 | checklist | 0.333 | 0.374 | 0.952 | 0.471 | 0.31 |
+| Llama 1B | 80 | plain | 0.307 | 0.327 | 0.923 | 0.446 | 0.38 |
+| Llama 1B | 80 | checklist | 0.363 | 0.490 | 0.942 | 0.499 | 0.34 |
+| Llama 3B | 0 | plain | 0.286 | 0.274 | 0.949 | 0.418 | 0.15 |
+| Llama 3B | 0 | checklist | 0.329 | 0.393 | 0.958 | 0.461 | 0.11 |
+| Llama 3B | 40 | plain | 0.283 | 0.253 | 0.938 | 0.418 | 0.19 |
+| Llama 3B | 40 | checklist | 0.336 | 0.425 | 0.950 | 0.475 | 0.15 |
+| Llama 3B | 80 | plain | 0.293 | 0.301 | 0.925 | 0.424 | 0.31 |
+| Llama 3B | 80 | checklist | 0.351 | 0.376 | 0.927 | 0.476 | 0.30 |
+| Llama 8B | 0 | plain | 0.285 | 0.233 | 0.981 | 0.432 | 0.06 |
+| Llama 8B | 0 | checklist | 0.363 | 0.423 | 0.990 | 0.508 | 0.04 |
+| Llama 8B | 40 | plain | 0.292 | 0.264 | 0.967 | 0.434 | 0.11 |
+| Llama 8B | 40 | checklist | 0.356 | 0.370 | 0.982 | 0.497 | 0.08 |
+| Llama 8B | 80 | plain | 0.283 | 0.260 | 0.957 | 0.428 | 0.18 |
+| Llama 8B | 80 | checklist | 0.347 | 0.421 | 0.976 | 0.490 | 0.11 |
+| Gemma 2B | 0 | plain | 0.270 | 0.171 | 0.950 | 0.404 | 0.16 |
+| Gemma 2B | 0 | checklist | 0.346 | 0.255 | 0.974 | 0.486 | 0.13 |
+| Gemma 2B | 40 | plain | 0.296 | 0.211 | 0.957 | 0.434 | 0.19 |
+| Gemma 2B | 40 | checklist | 0.357 | 0.274 | 0.965 | 0.488 | 0.23 |
+| Gemma 2B | 80 | plain | 0.303 | 0.220 | 0.945 | 0.441 | 0.24 |
+| Gemma 2B | 80 | checklist | 0.360 | 0.342 | 0.957 | 0.502 | 0.23 |
+| Gemma 9B | 0 | plain | 0.294 | 0.227 | 0.930 | 0.431 | 0.35 |
+| Gemma 9B | 0 | checklist | 0.406 | 0.374 | 0.982 | 0.560 | 0.11 |
+| Gemma 9B | 40 | plain | 0.292 | 0.259 | 0.929 | 0.424 | 0.35 |
+| Gemma 9B | 40 | checklist | 0.413 | 0.393 | 0.983 | 0.561 | 0.11 |
+| Gemma 9B | 80 | plain | 0.304 | 0.256 | 0.919 | 0.439 | 0.37 |
+| Gemma 9B | 80 | checklist | 0.440 | 0.379 | 0.964 | 0.577 | 0.22 |
+
+## Appendix C. Stretch results for all five models
+
+Source: `results/scale/size_stretch_metrics.csv`. On average 11.4 words replaced per article in both conditions.
+
+| Model | Condition | Prompt | Recall | Precision | F1 | Unsup. |
+|---|---|---|---|---|---|---|
+| Llama 1B | random | plain | 0.319 | 0.973 | 0.455 | 0.14 |
+| Llama 1B | random | checklist | 0.340 | 0.959 | 0.474 | 0.23 |
+| Llama 1B | targeted | plain | 0.275 | 0.919 | 0.402 | 0.37 |
+| Llama 1B | targeted | checklist | 0.327 | 0.953 | 0.464 | 0.24 |
+| Llama 3B | random | plain | 0.290 | 0.969 | 0.430 | 0.10 |
+| Llama 3B | random | checklist | 0.343 | 0.961 | 0.475 | 0.13 |
+| Llama 3B | targeted | plain | 0.251 | 0.886 | 0.381 | 0.32 |
+| Llama 3B | targeted | checklist | 0.326 | 0.934 | 0.455 | 0.22 |
+| Llama 8B | random | plain | 0.294 | 0.969 | 0.439 | 0.08 |
+| Llama 8B | random | checklist | 0.342 | 0.989 | 0.485 | 0.07 |
+| Llama 8B | targeted | plain | 0.263 | 0.951 | 0.399 | 0.23 |
+| Llama 8B | targeted | checklist | 0.327 | 0.985 | 0.469 | 0.07 |
+| Gemma 2B | random | plain | 0.280 | 0.951 | 0.419 | 0.20 |
+| Gemma 2B | random | checklist | 0.349 | 0.966 | 0.485 | 0.20 |
+| Gemma 2B | targeted | plain | 0.251 | 0.913 | 0.388 | 0.28 |
+| Gemma 2B | targeted | checklist | 0.334 | 0.935 | 0.472 | 0.32 |
+| Gemma 9B | random | plain | 0.294 | 0.925 | 0.430 | 0.35 |
+| Gemma 9B | random | checklist | 0.414 | 0.980 | 0.565 | 0.14 |
+| Gemma 9B | targeted | plain | 0.280 | 0.899 | 0.413 | 0.48 |
+| Gemma 9B | targeted | checklist | 0.395 | 0.973 | 0.546 | 0.16 |
+
+## Appendix D. NLI support and contradiction for all five models
+
+Source: `results/nli_metrics.csv`. Support = share of summary sentences entailed by the article; contradicted = share of summaries with at least one contradicted sentence.
+
+| Model | Prompt | Support L0 / L40 / L80 | Contradicted L0 / L40 / L80 |
+|---|---|---|---|
+| Llama 1B | plain | 0.71 / 0.70 / 0.71 | 0.19 / 0.34 / 0.41 |
+| Llama 1B | checklist | 0.71 / 0.75 / 0.70 | 0.20 / 0.35 / 0.42 |
+| Llama 3B | plain | 0.73 / 0.76 / 0.77 | 0.18 / 0.18 / 0.16 |
+| Llama 3B | checklist | 0.71 / 0.72 / 0.77 | 0.08 / 0.14 / 0.17 |
+| Llama 8B | plain | 0.77 / 0.80 / 0.83 | 0.13 / 0.12 / 0.07 |
+| Llama 8B | checklist | 0.73 / 0.78 / 0.79 | 0.16 / 0.12 / 0.16 |
+| Gemma 2B | plain | 0.84 / 0.74 / 0.76 | 0.09 / 0.13 / 0.17 |
+| Gemma 2B | checklist | 0.77 / 0.76 / 0.74 | 0.15 / 0.15 / 0.21 |
+| Gemma 9B | plain | 0.83 / 0.79 / 0.82 | 0.10 / 0.13 / 0.13 |
+| Gemma 9B | checklist | 0.80 / 0.77 / 0.81 | 0.17 / 0.18 / 0.18 |
+
+## References
+
+Data, tools and models used:
+
+1. T. Hasan, A. Bhattacharjee, M. S. Islam, et al., "XL-Sum: Large-scale multilingual abstractive summarization for 44 languages," in *Findings of ACL-IJCNLP*, 2021.
+2. A. Mhaske, H. Kedia, S. Doddapaneni, et al., "Naamapadam: A large-scale named entity annotated data for Indic languages," in *Proc. ACL*, 2023. (IndicNER)
+3. A. Conneau, G. Lample, M. Ranzato, L. Denoyer, and H. Jégou, "Word translation without parallel data," in *Proc. ICLR*, 2018. (MUSE dictionaries)
+4. P. Qi, Y. Zhang, Y. Zhang, J. Bolton, and C. D. Manning, "Stanza: A Python natural language processing toolkit for many human languages," in *Proc. ACL: System Demonstrations*, 2020.
+5. A. Grattafiori et al., "The Llama 3 herd of models," arXiv:2407.21783, 2024.
+6. Gemma Team, "Gemma 2: Improving open language models at a practical size," arXiv:2408.00118, 2024.
+7. T. Dettmers, A. Pagnoni, A. Holtzman, and L. Zettlemoyer, "QLoRA: Efficient finetuning of quantized LLMs," in *Proc. NeurIPS*, 2023. (NF4 4-bit quantisation)
+8. P. He, J. Gao, and W. Chen, "DeBERTaV3: Improving DeBERTa using ELECTRA-style pre-training with gradient-disentangled embedding sharing," in *Proc. ICLR*, 2023.
+9. A. Conneau, R. Rinott, G. Lample, et al., "XNLI: Evaluating cross-lingual sentence representations," in *Proc. EMNLP*, 2018.
+10. M. Laurer, W. van Atteveldt, A. Casas, and K. Welbers, "Less annotating, more classifying: Addressing the data scarcity issue of supervised machine learning with deep transfer learning and BERT-NLI," *Political Analysis*, 2024. (the NLI model's author)
+11. C.-Y. Lin, "ROUGE: A package for automatic evaluation of summaries," in *Text Summarization Branches Out (ACL Workshop)*, 2004.
+12. T. Zhang, V. Kishore, F. Wu, K. Q. Weinberger, and Y. Artzi, "BERTScore: Evaluating text generation with BERT," in *Proc. ICLR*, 2020.
+13. A. Conneau, K. Khandelwal, N. Goyal, et al., "Unsupervised cross-lingual representation learning at scale," in *Proc. ACL*, 2020. (XLM-R)
+14. B. Efron and R. J. Tibshirani, *An Introduction to the Bootstrap*. Chapman & Hall, 1993.
+15. P. Koehn, "Statistical significance tests for machine translation evaluation," in *Proc. EMNLP*, 2004. (paired bootstrap)
+16. "Benchmarking Hindi LLMs: A new suite of datasets and a comparative analysis," arXiv:2508.19831, 2025. (the Hindi benchmark cited in section 8)
+
+Related work (starting points for the paper's related-work section):
+
+17. J. Maynez, S. Narayan, B. Bohnet, and R. McDonald, "On faithfulness and factuality in abstractive summarization," in *Proc. ACL*, 2020.
+18. W. Kryściński, B. McCann, C. Xiong, and R. Socher, "Evaluating the factual consistency of abstractive text summarization," in *Proc. EMNLP*, 2020. (FactCC)
+19. P. Laban, T. Schnabel, P. N. Bennett, and M. A. Hearst, "SummaC: Re-visiting NLI-based models for inconsistency detection in summarization," *TACL*, 2022.
+20. S. Khanuja, S. Dandapat, A. Srinivasan, S. Sitaram, and M. Choudhury, "GLUECoS: An evaluation benchmark for code-switched NLP," in *Proc. ACL*, 2020.
+21. G. Aguilar, S. Kar, and T. Solorio, "LinCE: A centralized benchmark for linguistic code-switching evaluation," in *Proc. LREC*, 2020.
+
+Check every entry against the publisher's page (Google Scholar or the ACL Anthology) before the paper is submitted; author lists here are abbreviated, and reference 16's authors still need to be filled in.

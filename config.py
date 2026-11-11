@@ -147,3 +147,10 @@ NLI_VALIDATION_PATH = RESULTS_DIR / "nli_validation.csv"   # NLI vs the 48 hand 
 NLI_SCORES_PATH = RESULTS_DIR / "nli_scores.jsonl"         # one row per summary, all models, levels 0/40/80
 NLI_METRICS_PATH = RESULTS_DIR / "nli_metrics.csv"         # model x level x prompt
 NLI_DIFFS_PATH = RESULTS_DIR / "nli_diffs.csv"             # L80 - L0 and checklist - plain, paired, 95% intervals
+
+# Content preservation against the human-written XL-Sum reference summary (content.py).
+CONTENT_BERT_MODEL = "xlm-roberta-large"   # BERTScore's recommended multilingual model (layer 17 by default)
+CONTENT_BATCH = 32
+CONTENT_SCORES_PATH = RESULTS_DIR / "content_scores.jsonl"   # one row per summary: ROUGE-1/2/L and BERTScore F1
+CONTENT_METRICS_PATH = RESULTS_DIR / "content_metrics.csv"   # model x run x level x prompt, plus Lead-1/Lead-3
+CONTENT_DIFFS_PATH = RESULTS_DIR / "content_diffs.csv"       # L80 - L0, targeted - random, checklist - plain

@@ -2,7 +2,7 @@
 
 As Hindi news text becomes more code-mixed with English, do LLM summaries lose facts or add wrong ones? And does putting an automatically extracted fact checklist in the prompt help? This is a 5-day, inference-only student experiment; the full plan is in [PLAN.md](PLAN.md), and every choice it left open is in [DECISIONS.md](DECISIONS.md).
 
-**Status:** Plan complete (Days 1-5). `REPORT.md` is final; slides: https://claude.ai/artifact/PhyZ5TeEszC3owEEK2NuNx (private until shared). Stretch (targeted vs random mixing) is done: 400 summaries generated on Kaggle, scored, and written up in REPORT.md section 6 and on the deck. Model-size extension (Llama-3.2-3B and Llama-3.1-8B; levels 0/40/80 + stretch, 1,000 summaries each) is done: generated on Kaggle notebooks `factindic-3b` / `factindic-8b`, scored, and written up in REPORT.md section 7 and on the deck. Second model family, Gemma 2 (2B, 9B; same scope), is done: Kaggle notebooks `factindic-gemma2b` / `factindic-gemma9b`, REPORT.md section 8 and a deck slide. Paired bootstrap intervals (levels 0 vs 80, checklist vs plain) now back the main claims. Checked against the mentor's brief (CSET 346 PJ_06): F1, compression and inference time are reported, and `verify.py` adds an automatic sentence-level meaning check (NLI). The IEEE-style paper is still to do. Source code, data and results are public on GitHub: https://github.com/Swapnil-Pramanik/FactIndic
+**Status:** Plan complete (Days 1-5). `REPORT.md` is final; slides: https://claude.ai/artifact/PhyZ5TeEszC3owEEK2NuNx (private until shared). Stretch (targeted vs random mixing) is done: 400 summaries generated on Kaggle, scored, and written up in REPORT.md section 6 and on the deck. Model-size extension (Llama-3.2-3B and Llama-3.1-8B; levels 0/40/80 + stretch, 1,000 summaries each) is done: generated on Kaggle notebooks `factindic-3b` / `factindic-8b`, scored, and written up in REPORT.md section 7 and on the deck. Second model family, Gemma 2 (2B, 9B; same scope), is done: Kaggle notebooks `factindic-gemma2b` / `factindic-gemma9b`, REPORT.md section 8 and a deck slide. Paired bootstrap intervals (levels 0 vs 80, checklist vs plain) now back the main claims. Checked against the mentor's brief (CSET 346 PJ_06): F1, compression and inference time are reported, `verify.py` adds an automatic sentence-level meaning check (NLI), and `content.py` adds content preservation against the human XL-Sum reference summaries (ROUGE-1/2/L, BERTScore). REPORT.md also holds the reproducibility table, the exact prompts, full appendix tables and a reference list, so it is the single source for the paper and slides. The IEEE-style paper is still to do. Source code, data and results are public on GitHub: https://github.com/Swapnil-Pramanik/FactIndic
 
 ## How to run (in order)
 
@@ -36,6 +36,9 @@ python generate.py --model 3b --stretch     # -> results/scale/3b/stretch_genera
 # Automatic meaning check (NLI, CPU/Apple GPU, ~1 min for the validation, longer for all models):
 .venv/bin/python verify.py --validate       # NLI vs the 48 hand tags -> results/nli_validation.csv
 .venv/bin/python verify.py                  # all models, levels 0/40/80 -> results/nli_scores.jsonl, nli_metrics.csv, nli_diffs.csv (~20 min on Apple GPU)
+# Content preservation vs the human reference summary (ROUGE + BERTScore; downloads xlm-roberta-large, ~2 GB):
+.venv/bin/python content.py                 # all 5,400 summaries + Lead-1/Lead-3 -> results/content_scores.jsonl, content_metrics.csv, content_diffs.csv
+.venv/bin/python content.py --summarise     # rebuild the two tables only
 ```
 
 Each script reads only the files written by the step before it, so any step can be rerun on its own.
@@ -100,6 +103,7 @@ Without a CUDA GPU, `generate.py --dry-run` falls back to full precision on CPU/
 | Model-size extension: same pipeline on Llama-3.2-3B and Llama-3.1-8B | `generate.py --model 3b/8b`, `score.py --model 3b/8b [--stretch]`, `score.py --compare-sizes` | Llama 3B/8B done (2 x 1,000 rows; REPORT.md section 7); Gemma 2 2B/9B (`--model gemma2b/gemma9b`) done (2 x 1,000 rows; REPORT.md section 8) |
 | F1, compression ratio, inference time (brief's metric list) | `score.py` (`add_f1`, `metrics_table`) | done |
 | Automatic meaning check: sentence-level NLI, validated against the hand tags | `verify.py` | done |
+| Content preservation vs the XL-Sum reference summary: ROUGE-1/2/L, BERTScore, Lead-1/Lead-3 baselines | `content.py` | done |
 | Report | `REPORT.md` | final (IEEE paper version still to do) |
 
 ## Architecture
@@ -133,6 +137,7 @@ prompts.py              # the plain and checklist prompt text
 generate.py             # Llama summaries (1B main; --model 3b/8b for the size extension), resumable (run on a T4)
 score.py                # cut to 3 sentences, recall/precision/F1, tables + charts, model comparison
 verify.py               # sentence-level NLI meaning check (mDeBERTa XNLI), validated on the hand tags
+content.py              # ROUGE / BERTScore against the human XL-Sum reference summary
 .gitignore              # ignores .venv, caches, data/dict (downloaded) and FactIndic_colab.zip (rebuilt)
 tests/checks.py         # plain-assert sanity checks
 data/
@@ -156,6 +161,9 @@ results/                # created by generate.py
   nli_validation.csv    # verify.py --validate: NLI support vs the 48 hand tags (AUC etc.)
   nli_scores.jsonl / nli_metrics.csv  # verify.py: NLI support per summary; model x level x prompt table
   nli_diffs.csv         # NLI: level 80 - level 0 and checklist - plain per model, paired, 95% intervals
+  content_scores.jsonl  # content.py: ROUGE-1/2/L and BERTScore F1 per summary (all runs) and per Lead baseline
+  content_metrics.csv   # content.py: model x run x level/condition x prompt table, plus lead-1 / lead-3
+  content_diffs.csv     # content.py: L80 - L0, targeted - random, checklist - plain per model, paired, 95% intervals
   checklist_check.csv   # FINAL checklist-quality counts (20 articles), audited, with missed_items + audit_note
   checklist_check_filled.csv  # the student's original counts, untouched
   stretch_generations.jsonl   # 400 stretch summaries (Kaggle T4, cuda-4bit)
@@ -252,6 +260,15 @@ Nothing planned. Ideas for later are in `FUTURE_WORK.md`.
 | `auc` / `validate` | `--validate`: compare with the final hand tags (factual error, entity swap) -> `nli_validation.csv` |
 | `run_all` / `summarise` | every model's summaries at levels 0/40/80 -> `nli_scores.jsonl`; tables `nli_metrics.csv` and `nli_diffs.csv` (`--summarise` rebuilds them without rerunning NLI) |
 
+**`content.py`**
+
+| Function | Responsibility |
+|---|---|
+| `Tokenizer` | whitespace tokenizer over `score.match_key` normalisation; the default `rouge_score` tokenizer deletes Devanagari |
+| `lead` / `collect` | every model's main and stretch summaries (already cut to 3 sentences) plus Lead-1 / Lead-3 article baselines |
+| `score` | ROUGE-1/2/L F1 and BERTScore F1 (`xlm-roberta-large`, raw) against the article's `reference_summary` |
+| `summarise` | `content_metrics.csv` and paired intervals in `content_diffs.csv` (`--summarise` rebuilds without rescoring) |
+
 ## Flow
 
 1. `extract.py`: 8,847 test articles -> 6,414 pass the length filter -> 100 drawn with seed 42 -> checklist per article.
@@ -301,6 +318,7 @@ Nothing planned. Ideas for later are in `FUTURE_WORK.md`.
 | `meta-llama/Llama-3.2-1B-Instruct` (HF model) | summaries | **gated** (access granted), NF4 4-bit on a T4 |
 | `meta-llama/Llama-3.2-3B-Instruct`, `meta-llama/Llama-3.1-8B-Instruct` (HF models) | model-size extension | **gated** (3.1 licence accepted 2026-11-10), NF4 4-bit on a T4 |
 | `MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7` (HF model) | NLI meaning check (`verify.py`) | open, runs locally on MPS/CPU; needs `sentencepiece` and `protobuf` |
+| `xlm-roberta-large` (HF model) | BERTScore embeddings (`content.py`) | open, ~2 GB, runs locally on MPS/CPU |
 | `google/gemma-2-2b-it`, `google/gemma-2-9b-it` (HF models) | second model family | **gated** (Gemma licence accepted 2026-11-11), NF4 4-bit with float32 compute on a T4 (`setup` = `cuda-4bit-fp32`) |
 
 ## Dependencies
@@ -309,7 +327,7 @@ See `requirements.txt` (tested with Python 3.12). Generation on the GPU also nee
 
 ## Configuration
 
-Everything is in `config.py`: seed, paths, dataset location, length filter, mixing levels, POS classes (nouns, adjectives), dictionary settings, NER model, threshold and entity stoplist, generation settings (model, 4-bit, fp16 compute, `MAX_NEW_TOKENS`=200, pinned `CHAT_DATE`, dry-run size and path), scoring settings (`SCORE_SENTENCES`, output paths, chart colours), and manual-check settings (tag levels, 8 articles, tag categories, sheet paths), and stretch settings (`STRETCH_NAME_SIMILARITY`, conditions, paths), NLI settings (`NLI_MODEL`, window size, top windows, threshold, paths), and model-size settings (`MODELS`, `SCALE_LEVELS`, `SCALE_DIR`, the `size_*` paths, `BOOTSTRAP_SAMPLES`, `FLOAT32_MODELS` (Gemma: float32 compute), and `model_paths(tag)`, which gives each model's input and output files). No secrets are stored in the repo: the Hugging Face token lives only in the local HF cache after `hf auth login` (on Colab/Kaggle, use their secrets feature, never paste it into a notebook cell).
+Everything is in `config.py`: seed, paths, dataset location, length filter, mixing levels, POS classes (nouns, adjectives), dictionary settings, NER model, threshold and entity stoplist, generation settings (model, 4-bit, fp16 compute, `MAX_NEW_TOKENS`=200, pinned `CHAT_DATE`, dry-run size and path), scoring settings (`SCORE_SENTENCES`, output paths, chart colours), and manual-check settings (tag levels, 8 articles, tag categories, sheet paths), and stretch settings (`STRETCH_NAME_SIMILARITY`, conditions, paths), NLI settings (`NLI_MODEL`, window size, top windows, threshold, paths), content settings (`CONTENT_BERT_MODEL`, `CONTENT_BATCH`, the `content_*` paths), and model-size settings (`MODELS`, `SCALE_LEVELS`, `SCALE_DIR`, the `size_*` paths, `BOOTSTRAP_SAMPLES`, `FLOAT32_MODELS` (Gemma: float32 compute), and `model_paths(tag)`, which gives each model's input and output files). No secrets are stored in the repo: the Hugging Face token lives only in the local HF cache after `hf auth login` (on Colab/Kaggle, use their secrets feature, never paste it into a notebook cell).
 
 ## Repository and data licences
 
