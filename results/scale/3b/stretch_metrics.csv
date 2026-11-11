@@ -1,0 +1,5 @@
+condition,prompt,n,words_replaced,recall,recall_entities,precision,f1,unsupported_per_summary,summary_words,summary_latin_share,hit_max_tokens
+random,plain,100,11.37,0.29,0.288,0.969,0.43,0.1,40.56,0.004,0.01
+random,checklist,100,11.37,0.343,0.329,0.961,0.475,0.13,41.11,0.007,0.03
+targeted,plain,100,11.37,0.251,0.251,0.886,0.381,0.32,40.57,0.006,0.0
+targeted,checklist,100,11.37,0.326,0.324,0.934,0.455,0.22,41.41,0.003,0.02

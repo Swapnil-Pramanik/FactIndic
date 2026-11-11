@@ -1,0 +1,16 @@
+# Day 1 (extract.py, mix.py) runs on CPU; tested with Python 3.12.
+datasets==5.1.0
+huggingface-hub==2.4.0
+indic-nlp-library==0.92
+stanza==1.15.0
+torch==2.15.0
+transformers==5.22.2
+wordfreq==3.1.1
+# Day 3 (score.py)
+pandas==3.1.1
+matplotlib==3.11.2
+# verify.py (NLI meaning check)
+sentencepiece==0.2.3
+protobuf==7.36.2
+# Day 2 (generate.py) on the Kaggle T4, as actually run:
+#   torch==2.11.0+cu130  transformers==5.22.2  bitsandbytes==0.50.2  accelerate==1.15.0

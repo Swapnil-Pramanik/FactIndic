@@ -1,0 +1,10 @@
+# Local environment and caches
+.venv/
+__pycache__/
+.DS_Store
+
+# Downloaded by mix.py (MUSE dictionary, CC BY-NC 4.0); not redistributed here
+data/dict/
+
+# Build artifact for Kaggle/Colab; rebuild it from the source files (see README)
+FactIndic_colab.zip

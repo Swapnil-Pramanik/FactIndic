@@ -1,0 +1,7 @@
+level,prompt,entity swap,number drift,date shift,unsupported addition,language/script drift,none
+0,checklist,3,1,0,2,0,5
+0,plain,1,0,0,1,0,6
+40,checklist,2,0,0,0,3,4
+40,plain,1,0,0,3,4,2
+80,checklist,5,1,0,4,4,0
+80,plain,3,1,0,1,4,2
