@@ -586,7 +586,7 @@ Data, tools and models used:
 13. A. Conneau, K. Khandelwal, N. Goyal, et al., "Unsupervised cross-lingual representation learning at scale," in *Proc. ACL*, 2020. (XLM-R)
 14. B. Efron and R. J. Tibshirani, *An Introduction to the Bootstrap*. Chapman & Hall, 1993.
 15. P. Koehn, "Statistical significance tests for machine translation evaluation," in *Proc. EMNLP*, 2004. (paired bootstrap)
-16. "Benchmarking Hindi LLMs: A new suite of datasets and a comparative analysis," arXiv:2508.19831, 2025. (the Hindi benchmark cited in section 8)
+16. A. Kamath, K. Singla, R. Paul, R. Joshi, U. Vaidya, S. S. Chauhan, and N. Wartikar, "Benchmarking Hindi LLMs: A new suite of datasets and a comparative analysis," in *Proc. BHASHA Workshop*, 2025; arXiv:2508.19831. (the Hindi benchmark cited in section 8)
 
 Related work (starting points for the paper's related-work section):
 
@@ -596,4 +596,4 @@ Related work (starting points for the paper's related-work section):
 20. S. Khanuja, S. Dandapat, A. Srinivasan, S. Sitaram, and M. Choudhury, "GLUECoS: An evaluation benchmark for code-switched NLP," in *Proc. ACL*, 2020.
 21. G. Aguilar, S. Kar, and T. Solorio, "LinCE: A centralized benchmark for linguistic code-switching evaluation," in *Proc. LREC*, 2020.
 
-Check every entry against the publisher's page (Google Scholar or the ACL Anthology) before the paper is submitted; author lists here are abbreviated, and reference 16's authors still need to be filled in.
+Check every entry against the publisher's page (Google Scholar or the ACL Anthology) before the paper is submitted; author lists here are abbreviated. The IEEE paper (`paper/`) uses the same sources, renumbered in order of citation.

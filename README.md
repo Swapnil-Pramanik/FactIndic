@@ -2,7 +2,7 @@
 
 As Hindi news text becomes more code-mixed with English, do LLM summaries lose facts or add wrong ones? And does putting an automatically extracted fact checklist in the prompt help? This is a 5-day, inference-only student experiment; the full plan is in [PLAN.md](PLAN.md), and every choice it left open is in [DECISIONS.md](DECISIONS.md).
 
-**Status:** Plan complete (Days 1-5). `REPORT.md` is final; slides: https://claude.ai/artifact/PhyZ5TeEszC3owEEK2NuNx (private until shared). Stretch (targeted vs random mixing) is done: 400 summaries generated on Kaggle, scored, and written up in REPORT.md section 6 and on the deck. Model-size extension (Llama-3.2-3B and Llama-3.1-8B; levels 0/40/80 + stretch, 1,000 summaries each) is done: generated on Kaggle notebooks `factindic-3b` / `factindic-8b`, scored, and written up in REPORT.md section 7 and on the deck. Second model family, Gemma 2 (2B, 9B; same scope), is done: Kaggle notebooks `factindic-gemma2b` / `factindic-gemma9b`, REPORT.md section 8 and a deck slide. Paired bootstrap intervals (levels 0 vs 80, checklist vs plain) now back the main claims. Checked against the mentor's brief (CSET 346 PJ_06): F1, compression and inference time are reported, `verify.py` adds an automatic sentence-level meaning check (NLI), and `content.py` adds content preservation against the human XL-Sum reference summaries (ROUGE-1/2/L, BERTScore). REPORT.md also holds the reproducibility table, the exact prompts, full appendix tables and a reference list, so it is the single source for the paper and slides. Prompting-strategy extension (2026-11-19): two more factuality-aware prompts, `instructed` (checklist + explicit rules from the brief) and `verified` (two-pass self-check), run on Llama 1B and Gemma 2 9B at levels 0/40/80 via Kaggle notebooks `factindic-prompt-1b` / `factindic-prompt-gemma9b`; scored by `prompting.py`; written up in REPORT.md section 11 (Limitations is now 12, Reproducibility 13). The IEEE-style paper is still to do. Source code, data and results are public on GitHub: https://github.com/Swapnil-Pramanik/FactIndic
+**Status:** Plan complete (Days 1-5). `REPORT.md` is final; slides: https://claude.ai/artifact/PhyZ5TeEszC3owEEK2NuNx (private until shared). Stretch (targeted vs random mixing) is done: 400 summaries generated on Kaggle, scored, and written up in REPORT.md section 6 and on the deck. Model-size extension (Llama-3.2-3B and Llama-3.1-8B; levels 0/40/80 + stretch, 1,000 summaries each) is done: generated on Kaggle notebooks `factindic-3b` / `factindic-8b`, scored, and written up in REPORT.md section 7 and on the deck. Second model family, Gemma 2 (2B, 9B; same scope), is done: Kaggle notebooks `factindic-gemma2b` / `factindic-gemma9b`, REPORT.md section 8 and a deck slide. Paired bootstrap intervals (levels 0 vs 80, checklist vs plain) now back the main claims. Checked against the mentor's brief (CSET 346 PJ_06): F1, compression and inference time are reported, `verify.py` adds an automatic sentence-level meaning check (NLI), and `content.py` adds content preservation against the human XL-Sum reference summaries (ROUGE-1/2/L, BERTScore). REPORT.md also holds the reproducibility table, the exact prompts, full appendix tables and a reference list, so it is the single source for the paper and slides. Prompting-strategy extension (2026-11-19): two more factuality-aware prompts, `instructed` (checklist + explicit rules from the brief) and `verified` (two-pass self-check), run on Llama 1B and Gemma 2 9B at levels 0/40/80 via Kaggle notebooks `factindic-prompt-1b` / `factindic-prompt-gemma9b`; scored by `prompting.py`; written up in REPORT.md section 11 (Limitations is now 12, Reproducibility 13). IEEE-style paper (2026-11-20): `paper/FactIndic_IEEE.docx` and `.pdf` (5 pages, two-column), built from REPORT.md numbers by `paper/build_paper.js`. Presentation slides still need finishing. Source code, data and results are public on GitHub: https://github.com/Swapnil-Pramanik/FactIndic
 
 ## How to run (in order)
 
@@ -44,6 +44,10 @@ python generate.py --prompting --model 1b   # on the T4 -> results/prompting/1b/
 .venv/bin/python prompting.py               # facts + NLI + ROUGE/BERTScore for the new rows, compared with plain/checklist
                                             #   -> results/prompting/<model>/scores.jsonl, prompting_metrics.csv, prompting_diffs.csv, prompting_chart.png
 .venv/bin/python prompting.py --summarise   # rebuild the tables and chart only
+# IEEE paper (Word + PDF):
+.venv/bin/python paper/figures.py           # -> paper/fig_prompting.png
+(cd paper && npm install && node build_paper.js)   # -> paper/FactIndic_IEEE.docx
+#   PDF: open the .docx in Word and save as PDF (or soffice --headless --convert-to pdf)
 ```
 
 Each script reads only the files written by the step before it, so any step can be rerun on its own.
@@ -110,7 +114,8 @@ Without a CUDA GPU, `generate.py --dry-run` falls back to full precision on CPU/
 | Automatic meaning check: sentence-level NLI, validated against the hand tags | `verify.py` | done |
 | Content preservation vs the XL-Sum reference summary: ROUGE-1/2/L, BERTScore, Lead-1/Lead-3 baselines | `content.py` | done |
 | Prompting strategies: plain -> checklist -> instructed (explicit factuality rules) -> verified (two-pass self-check) | `prompts.py`, `generate.py --prompting`, `prompting.py` | done (2 x 600 rows; REPORT.md section 11) |
-| Report | `REPORT.md` | final (IEEE paper version still to do) |
+| Report | `REPORT.md` | final |
+| IEEE-style paper (Word + PDF) | `paper/build_paper.js`, `paper/figures.py` -> `paper/FactIndic_IEEE.docx`, `.pdf` | done (5 pages) |
 
 ## Architecture
 
@@ -146,6 +151,13 @@ score.py                # cut to 3 sentences, recall/precision/F1, tables + char
 verify.py               # sentence-level NLI meaning check (mDeBERTa XNLI), validated on the hand tags
 content.py              # ROUGE / BERTScore against the human XL-Sum reference summary
 prompting.py            # prompting-strategy extension: scores instructed/verified, compares all four prompts
+paper/
+  build_paper.js        # writes the IEEE two-column paper (docx-js); every number is copied from REPORT.md / results CSVs
+  figures.py            # column-width Fig. 2 (four prompts) from prompting_metrics.csv -> fig_prompting.png
+  fig_prompting.png     # Fig. 2 of the paper
+  FactIndic_IEEE.docx   # the paper (Word)
+  FactIndic_IEEE.pdf    # the paper (PDF, exported from Word)
+  package.json          # docx npm dependency (node_modules/ is git-ignored)
 .gitignore              # ignores .venv, caches, data/dict (downloaded) and FactIndic_colab.zip (rebuilt)
 tests/checks.py         # plain-assert sanity checks
 data/
@@ -346,6 +358,7 @@ Nothing planned. Ideas for later are in `FUTURE_WORK.md`.
 ## External services and models
 
 | Name | Used for | Notes |
+| `docx` (npm, `paper/package.json`) | building the IEEE paper | Node.js; PDF exported with Microsoft Word |
 |---|---|---|
 | `csebuetnlp/xlsum` (HF dataset, `refs/convert/parquet`, `hindi/test/0000.parquet`) | articles | loading script broken on `datasets` 5.x, so Parquet is used |
 | `ai4bharat/IndicNER` (HF model) | entities | **gated**: accept licence + `hf auth login` |

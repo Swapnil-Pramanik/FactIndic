@@ -8,3 +8,6 @@ data/dict/
 
 # Build artifact for Kaggle/Colab; rebuild it from the source files (see README)
 FactIndic_colab.zip
+
+# paper/ build tool (npm install in paper/)
+paper/node_modules/
