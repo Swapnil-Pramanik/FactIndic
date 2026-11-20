@@ -1,16 +1,17 @@
 # FactIndic: Do code-mixed inputs make LLM summaries lose or invent facts?
 
-*Final version (Day 5). Result numbers in section 3 come from `results/metrics.csv`; error-tag counts in section 5 come from `results/error_tag_counts.csv`, checklist-quality counts from `results/checklist_check.csv`; stretch numbers in section 6 come from `results/stretch_metrics.csv` and `results/scale/size_stretch_diffs.csv`; model-size and Gemma numbers in sections 7 and 8 come from `results/scale/size_metrics.csv`, `size_stretch_metrics.csv`, `size_stretch_diffs.csv` and `size_mixing_diffs.csv`; NLI numbers in section 9 come from `results/nli_validation.csv`, `nli_metrics.csv` and `nli_diffs.csv`; ROUGE and BERTScore numbers in section 10 come from `results/content_metrics.csv` and `content_diffs.csv`. All intervals are paired 95% bootstrap intervals over the 100 articles (2,000 resamples, seeded).*
+*Final version (Day 5). Result numbers in section 3 come from `results/metrics.csv`; error-tag counts in section 5 come from `results/error_tag_counts.csv`, checklist-quality counts from `results/checklist_check.csv`; stretch numbers in section 6 come from `results/stretch_metrics.csv` and `results/scale/size_stretch_diffs.csv`; model-size and Gemma numbers in sections 7 and 8 come from `results/scale/size_metrics.csv`, `size_stretch_metrics.csv`, `size_stretch_diffs.csv` and `size_mixing_diffs.csv`; NLI numbers in section 9 come from `results/nli_validation.csv`, `nli_metrics.csv` and `nli_diffs.csv`; ROUGE and BERTScore numbers in section 10 come from `results/content_metrics.csv` and `content_diffs.csv`; prompting-strategy numbers in section 11 come from `results/prompting/prompting_metrics.csv`, `prompting_diffs.csv` and `list_marker_check.csv`. All intervals are paired 95% bootstrap intervals over the 100 articles (2,000 resamples, seeded).*
 
 ## Summary of findings
 
-- **Setup.** 100 BBC Hindi news articles (XL-Sum), made progressively code-mixed with English (0-80% of eligible nouns and adjectives; up to 18.6% of all words). Summarised by five open LLMs (Llama 3.2 1B/3B, Llama 3.1 8B, Gemma 2 2B/9B) with a plain prompt and a fact-checklist prompt: 5,400 summaries in all.
+- **Setup.** 100 BBC Hindi news articles (XL-Sum), made progressively code-mixed with English (0-80% of eligible nouns and adjectives; up to 18.6% of all words). Summarised by five open LLMs (Llama 3.2 1B/3B, Llama 3.1 8B, Gemma 2 2B/9B) with a plain prompt and a fact-checklist prompt, plus two further factuality-aware prompts on the weakest and strongest model: 6,600 summaries in all.
 - **Facts are not lost, but wrong facts increase.** Fact recall stays flat with mixing for every model (0.27-0.33 with the plain prompt). Unsupported facts per summary rise with mixing for all three Llama models (Llama 1B 0.16 -> 0.38; +0.22, 95% interval 0.07 to 0.39) but not clearly for Gemma 2.
 - **Bigger helps, but is not immune.** Llama 8B makes far fewer wrong facts (0.06 per summary unmixed) yet mixing still roughly triples them. Llama 3B is no better than 1B.
-- **The fact-checklist prompt raises recall at every level for every model** (up to +0.14 for Gemma 2 9B) and improves number recall most (Llama 1B at level 80: 0.49 vs 0.33). Best combination: Gemma 2 9B with the checklist, F1 0.56-0.58.
+- **The fact-checklist prompt raises recall at every level for every model** (up to +0.14 for Gemma 2 9B) and improves number recall most (Llama 1B at level 80: 0.49 vs 0.33). Best of the two original prompts: Gemma 2 9B with the checklist, F1 0.56-0.58 (the instructed prompt of section 11 raises this to 0.59).
 - **English fact words hurt most.** Switching the fact words themselves to English (stretch) costs Llama 1B 0.044 recall and 0.053 precision against random mixing of the same number of words; the checklist prompt closes most of that gap. Most of the precision loss is names respelled in Devanagari, not invented facts.
 - **Meaning check (NLI).** An automatic sentence-level entailment check agrees moderately with the hand tags (AUC 0.74). It shows mixing doubles summaries with a contradicted sentence for Llama 1B (19% -> 41%), not clearly for larger models. The checklist adds facts but does not fix who-did-what errors.
 - **Content vs human summaries (ROUGE/BERTScore).** Unmixed, all models beat the Lead-3 baseline on ROUGE-1 (0.27-0.30 vs 0.26). Mixing lowers ROUGE-1 clearly for Llama 1B and 3B (-0.03) and not clearly for the rest; the checklist prompt does not change ROUGE.
+- **Prompting strategies (section 11).** Adding explicit factuality rules to the checklist prompt helps the strong model: for Gemma 2 9B it gives the best F1 in the study (0.59), cuts unsupported facts at level 80 from 0.22 to 0.08 per summary, and removes the effect of mixing on them. It barely changes Llama 1B. A second pass in which the same model checks its own summary does not help either model: it drops facts (recall -0.05 to -0.15) without removing unsupported ones.
 - **Main error type in hand tags:** entity and role swaps (right names, wrong roles), which string-matching metrics cannot see.
 
 ## 1. Question
@@ -231,7 +232,7 @@ Effect of mixing on unsupported facts per summary, all five models (plain prompt
 **Observations:**
 1. **With the plain prompt, Gemma is the least affected by mixing.** For both Gemma models the rise in unsupported facts from level 0 to 80 is small and not distinguishable from zero; for all three Llama models it is. The intervals overlap with Llama 8B's, so this is suggestive rather than proven. It also does not hold for Gemma 9B with the checklist prompt, where mixing still adds 0.11 unsupported facts per summary (0.03 to 0.19).
 2. **Gemma 9B's low plain precision is mostly spelling, not invention.** It has the lowest plain precision of all models even with no mixing (0.930). Of its 35 unsupported facts at level 0, 11 are अमेरिका, the standard spelling, where BBC Hindi writes अमरीका, and 19 of the 35 are close respellings (similarity >= 0.75) of a name in the article. Gemma 2B has a different quirk: 7 of its 16 level-0 "facts" are the word "Devanagari", copied from the prompt's instructions.
-3. **Gemma 9B with the checklist is the best combination in the study.** Recall is 0.406-0.440, the highest of any model, and the checklist adds +0.11 to +0.14 recall and +0.05 precision at every level, all clear of zero. Much of the precision gain is likely because the checklist shows the article's own spellings (अमरीका), which the model then copies; we did not check this directly.
+3. **Gemma 9B with the checklist is the best combination of the two original prompts** (section 11's instructed prompt does slightly better). Recall is 0.406-0.440, the highest of any model, and the checklist adds +0.11 to +0.14 recall and +0.05 precision at every level, all clear of zero. Much of the precision gain is likely because the checklist shows the article's own spellings (अमरीका), which the model then copies; we did not check this directly.
 4. **English fact words (the stretch) still cost Gemma something.** Plain-prompt precision falls by 0.039 (2B, -0.080 to -0.003) and 0.026 (9B, -0.053 to -0.003) against random mixing; the recall cost is -0.028 for 2B (clear of zero) and -0.015 for 9B (not). Both are smaller than Llama 1B's and 3B's precision costs (-0.053, -0.082).
 5. **Gemma answers in Hindi.** At most 2.9% (2B) and 0.4% (9B) of summary words contain English letters, unlike Llama 8B (up to 5.4%).
 6. **Two things we have not explained.** Gemma's plain-prompt number recall is lower than Llama's (0.17-0.26 vs 0.23-0.33); it may write numbers differently, but we did not check. And in two cells recall *rises* with mixing (Gemma 2B plain +0.033, Gemma 9B checklist +0.034, both clear of zero).
@@ -307,7 +308,71 @@ Effect of mixing on ROUGE-1 (level 80 minus level 0, same article, 95% interval)
 3. **The checklist prompt does not change content overlap.** Checklist minus plain is within noise for ROUGE-1 and ROUGE-L at every model and level tested (0, 40, 80), and for ROUGE-2 except one borderline cell (Llama 1B level 40, -0.007, -0.014 to -0.000). The only other clear differences are tiny BERTScore drops (Gemma 9B at all three levels, -0.003 to -0.004; Llama 3B level 40, -0.004; Llama 1B level 0, -0.002). So the checklist's recall gains come from keeping specific names and numbers, not from writing summaries closer to the human one.
 4. **English fact words (stretch) barely change content overlap.** Targeted minus random is within noise everywhere except Llama 1B plain ROUGE-1 (-0.012, -0.022 to -0.002) and Gemma 9B plain BERTScore (-0.002).
 
-## 11. Limitations
+## 11. Prompting strategies: explicit rules and self-verification
+
+**Why.** The brief asks for a factuality-aware prompt that tells the model to avoid unsupported information, keep entities, numbers and dates, and handle code-mixed words. The checklist prompt only does part of this (it lists facts to keep). We therefore tested two further prompts, so that four strategies form a ladder in which each step adds one thing:
+
+| Prompt | What it adds |
+|---|---|
+| plain | task only |
+| checklist | the article's fact checklist, "keep exactly as written" |
+| instructed | six explicit rules: use only the article's information; spell names as the article does; copy numbers and dates exactly; keep who did what to whom; read English words in mixed text with their normal meaning and write in Hindi; include the main event, people and key numbers |
+| verified | two passes: the instructed summary (cut to 3 sentences) is given back to the same model with the article, which must remove unsupported details and correct names, numbers, dates and roles |
+
+Rules 2 and 4 target the two main error types found earlier (name respellings, role swaps). The full prompt text is in Appendix A.
+
+**Setup.** Llama 3.2 1B (the weakest model, most affected by mixing) and Gemma 2 9B (the strongest), levels 0, 40 and 80, 100 articles: 600 new summaries per model, same 4-bit settings, greedy decoding and 200-token cap. Plain and checklist come from the earlier runs on the same articles, so every comparison below is paired by article. Both new prompts were written from the brief and the earlier error analysis and frozen before any output was generated; they were not tuned on the test articles. All three checks are applied: fact recall/precision, NLI and ROUGE/BERTScore.
+
+| Model | Level | Prompt | Recall | Precision | F1 | Unsup. / summary | NLI contradicted | ROUGE-1 | Words | Seconds |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Llama 1B | 0 | plain | 0.306 | 0.969 | 0.446 | 0.16 | 0.19 | 0.272 | 55 | 6.4 |
+| Llama 1B | 0 | checklist | 0.344 | 0.976 | 0.482 | 0.12 | 0.20 | 0.269 | 55 | 6.5 |
+| Llama 1B | 0 | instructed | 0.362 | 0.984 | 0.506 | 0.07 | 0.19 | 0.259 | 59 | 7.2 |
+| Llama 1B | 0 | verified | 0.247 | 0.767* | 0.352 | 0.60* | 0.09 | 0.216 | 44 | 13.1 |
+| Llama 1B | 80 | plain | 0.307 | 0.923 | 0.446 | 0.38 | 0.41 | 0.241 | 58 | 6.5 |
+| Llama 1B | 80 | checklist | 0.363 | 0.942 | 0.499 | 0.34 | 0.42 | 0.245 | 57 | 6.5 |
+| Llama 1B | 80 | instructed | 0.363 | 0.951 | 0.505 | 0.29 | 0.37 | 0.232 | 61 | 7.1 |
+| Llama 1B | 80 | verified | 0.248 | 0.741* | 0.352 | 0.79* | 0.26 | 0.197 | 44 | 13.1 |
+| Gemma 9B | 0 | plain | 0.294 | 0.930 | 0.431 | 0.35 | 0.10 | 0.299 | 50 | 18.0 |
+| Gemma 9B | 0 | checklist | 0.406 | 0.982 | 0.560 | 0.11 | 0.17 | 0.295 | 55 | 21.0 |
+| Gemma 9B | 0 | instructed | 0.441 | 0.987 | 0.588 | 0.07 | 0.11 | 0.304 | 48 | 20.0 |
+| Gemma 9B | 0 | verified | 0.391 | 0.985 | 0.540 | 0.10 | 0.12 | 0.310 | 44 | 37.9 |
+| Gemma 9B | 80 | plain | 0.304 | 0.919 | 0.439 | 0.37 | 0.13 | 0.293 | 53 | 18.1 |
+| Gemma 9B | 80 | checklist | 0.440 | 0.964 | 0.577 | 0.22 | 0.18 | 0.286 | 56 | 20.3 |
+| Gemma 9B | 80 | instructed | 0.452 | 0.985 | 0.594 | 0.08 | 0.19 | 0.285 | 50 | 19.6 |
+| Gemma 9B | 80 | verified | 0.393 | 0.976 | 0.539 | 0.13 | 0.20 | 0.294 | 45 | 36.8 |
+
+Level 40 is in `prompting_metrics.csv` and follows the same pattern. \*Inflated by list numbering; see observation 4.
+
+Paired differences (same article and level, 95% bootstrap interval; bold = interval excludes zero):
+
+| Model | Comparison | Recall | F1 | Unsup. / summary |
+|---|---|---|---|---|
+| Llama 1B | instructed - checklist, L0 / L40 / L80 | +0.018 / +0.029 / +0.000 | +0.024 / +0.024 / +0.005 | -0.05 / -0.09 / -0.05 |
+| Llama 1B | verified - instructed, L0 / L40 / L80 | **-0.115 / -0.147 / -0.115** | **-0.151 / -0.165 / -0.151** | see obs. 4 |
+| Gemma 9B | instructed - checklist, L0 / L40 / L80 | **+0.035 / +0.035** / +0.012 | **+0.030 / +0.031** / +0.006 | -0.04 / +0.01 / **-0.14** |
+| Gemma 9B | verified - instructed, L0 / L40 / L80 | **-0.050 / -0.065 / -0.059** | **-0.048 / -0.062 / -0.046** | +0.03 / +0.04 / +0.05 |
+
+Effect of mixing on unsupported facts per summary (level 80 minus level 0), by prompt:
+
+| Model | plain | checklist | instructed | verified |
+|---|---|---|---|---|
+| Llama 1B | **+0.22** (0.07 to 0.39) | **+0.22** (0.09 to 0.36) | **+0.22** (0.09 to 0.35) | +0.19 (-0.02 to 0.41) |
+| Gemma 9B | +0.02 (-0.09 to 0.13) | **+0.11** (0.03 to 0.19) | +0.01 (-0.06 to 0.07) | +0.03 (-0.04 to 0.09) |
+
+![Four prompting strategies vs mixing level](results/prompting/prompting_chart.png)
+
+The chart uses the standard scoring, so Llama 1B's verified line for unsupported facts includes the list-numbering artifact (observation 4).
+
+**Observations:**
+1. **Explicit rules help the strong model.** For Gemma 9B, the instructed prompt raises recall over the checklist prompt at levels 0 and 40 (+0.035, both clear) and gives the best F1 in the whole study (0.588-0.594). At level 80 it cuts unsupported facts from 0.22 to 0.08 per summary (-0.14, interval -0.24 to -0.05) and raises precision to 0.985. With the checklist prompt, mixing still added 0.11 unsupported facts per summary; with the rules this effect disappears (+0.01, -0.06 to 0.07). It costs nothing extra: about 20 s per summary, like the checklist, and its summaries are slightly shorter (48-50 words vs 54-56).
+2. **For Llama 1B the rules change little.** Recall, precision and unsupported facts all move in the right direction (unsupported 0.07 vs 0.12 at level 0, 0.29 vs 0.34 at level 80), but no difference is clear of zero, and mixing still adds 0.22 unsupported facts per summary, exactly as with the other prompts. The longer prompt also makes the 1B model ramble: 95-97% of its summaries hit the 200-token cap (40-53% before), and its NLI support falls (0.64 vs 0.75 at level 40, clear). A 1B model cannot reliably follow six rules at once.
+3. **Self-verification by the same model does not help.** For both models the check pass removes facts rather than errors. It shortens summaries (Gemma 49 -> 44 words, Llama 59 -> 43) and lowers recall clearly at every level (Gemma -0.05 to -0.065, Llama -0.12 to -0.15) and so F1, without reducing unsupported facts (Gemma +0.03 to +0.05, within noise). It changed 65-77% of Gemma's drafts and 80-86% of Llama's, and doubles the cost (Gemma 37 s per summary instead of 20). The one gain is that Llama 1B has fewer summaries with a contradicted sentence (0.26 vs 0.37 at level 80; -0.10 and -0.11 vs instructed at levels 0 and 80, both clear), but part of this is simply fewer, shorter sentences to contradict. Gemma's ROUGE-1 rises slightly (+0.010 to +0.016 over instructed at levels 40 and 80), probably because its shorter summaries are closer in length to the one-sentence reference.
+4. **Llama 1B often breaks the format in the check pass.** In 106 of its 300 verified outputs it answers as a numbered list ("1. ... 2. ...") and sometimes loops ("130 ... 130 ... 220"). The scorer then counts "1" and "2" as unsupported numbers (157 of the unsupported facts), which is why its precision falls to 0.74-0.77. Rescoring with list markers removed (`list_marker_check.csv`; the project's scoring rule itself is unchanged) gives precision 0.93-0.95 and 0.12-0.30 unsupported facts per summary, about the same as the other prompts, while recall stays low (0.23-0.28). So the precision collapse is mostly formatting, but the loss of facts is real.
+
+**What this means.** A factuality-aware *instruction* works when the model is strong enough to follow it: for Gemma 9B it is the single most effective change we tested, and it neutralises the effect of code-mixing on unsupported facts. A self-check by the same model is not a cheap fix: it makes summaries shorter and less informative, and a small model may not even keep the output format. A stronger, separate checker (or an NLI filter like the one in section 9) would be the next thing to try.
+
+## 12. Limitations
 
 - **Machine-made mixing.** The mixed text is generated by dictionary lookup, not written by people, so it is not natural Hinglish.
   - Context-free lookup picks some wrong senses: हवाई -> "hawaii", विराम -> "comma".
@@ -316,7 +381,7 @@ Effect of mixing on ROUGE-1 (level 80 minus level 0, same article, 95% interval)
 - **Automatic checklist.** The checklist is automatic and imperfect: about 95% of its items are correct, and it covers about 90% of the facts (20-article check). Dates are too rare (18 articles) to analyse, and number words (तीन, लाख) are not recognised.
 - **Small, AI-revised manual sample.** Only 48 summaries were tagged (8 per cell), so the tag counts show which kinds of error occur, not reliable differences between conditions. The final tags were audited and partly revised by an AI assistant (Claude) and then reviewed by the student, so they are not a purely independent human judgement. The student's original tags are kept for comparison.
 - **Automatic meaning check is approximate.** The NLI model was trained mostly on short, translated sentence pairs, not Hindi news, and sees at most 3 article windows per sentence, so it can miss support spread across the article. Its agreement with the hand tags is moderate (AUC 0.69-0.74 on 48 summaries, all from Llama 1B), and the 0.5 thresholds were not tuned.
-- **Narrow factuality-aware prompt.** Our factuality-aware prompt adds a list of facts to keep "exactly as they are written". It does not separately tell the model to avoid unsupported information or how to handle code-mixed words, as some factuality-aware prompting strategies do. A broader instruction might reduce unsupported additions further; testing it would need all summaries to be generated again.
+- **Prompting strategies tested on two models only.** The broader instructed prompt and the self-check (section 11) were run on Llama 1B and Gemma 2 9B at levels 0/40/80, not on all five models or the stretch. The prompts were not tuned; a different wording, or a checker model different from the summariser, might do better. The self-check results for Llama 1B depend on how list-formatted output is scored (section 11, observation 4).
 - **String-matching scores.** Recall and precision use string matching.
   - A fact restated in different words, or with a spelling variant (अमेरिका vs BBC's अमरीका), counts as missed or unsupported.
   - Of 185 unsupported entities, 71 are close spellings of a phrase in the article. Some are real name distortions, others just grammar.
@@ -324,7 +389,7 @@ Effect of mixing on ROUGE-1 (level 80 minus level 0, same article, 95% interval)
 - **ROUGE is not comparable with published XL-Sum scores.** We use our own Hindi tokenisation (normalised whitespace words), not XL-Sum's multilingual ROUGE package, and score zero-shot summaries cut to 3 sentences against a 1-sentence reference. The numbers are for comparing our conditions with each other and with the Lead baselines only.
 - **Limited significance testing.** Paired bootstrap intervals cover levels 0 and 80, checklist vs plain, and the stretch. Levels 20 and 60 are not tested, and no correction is made for the many comparisons, so a single interval that only just clears zero should be read with care.
 
-## 12. Reproducibility
+## 13. Reproducibility
 
 **Pipeline.**
 
@@ -335,10 +400,12 @@ XL-Sum Hindi test split (8,847 articles)
   -> code-mixing at 0/20/40/60/80% (MUSE dictionary, Stanza POS)      mix.py
      + stretch: targeted vs random mixing at equal word counts        mix.py --stretch
   -> summaries: 5 LLMs x 2 prompts, 4-bit, greedy, Kaggle T4          generate.py
+     + instructed / verified prompts: Llama 1B, Gemma 9B                generate.py --prompting
   -> cut to first 3 sentences
        -> fact recall / precision / F1 vs checklist and article       score.py
        -> sentence-level NLI vs the article                           verify.py
        -> ROUGE / BERTScore vs the human reference summary            content.py
+       -> four-prompt comparison (all three checks)                    prompting.py
   -> paired bootstrap 95% intervals over articles                     score.py (paired_diffs)
 ```
 
@@ -352,7 +419,7 @@ XL-Sum Hindi test split (8,847 articles)
 | Models | `meta-llama/Llama-3.2-1B-Instruct` (main), `Llama-3.2-3B-Instruct`, `Llama-3.1-8B-Instruct`, `google/gemma-2-2b-it`, `google/gemma-2-9b-it` |
 | Quantisation | 4-bit NF4 weights (bitsandbytes 0.50.2); float16 compute for Llama, float32 for Gemma 2 |
 | Decoding | greedy, at most 200 new tokens; Llama chat-template date pinned to 01 Nov 2026 |
-| Hardware | Kaggle NVIDIA T4 (16 GB); about 15 GPU-hours of generation for all 5,400 summaries |
+| Hardware | Kaggle NVIDIA T4 (16 GB); about 19 GPU-hours of generation for all 6,600 summaries |
 | Software (GPU) | torch 2.11.0+cu130, transformers 5.22.2, accelerate 1.15.0 |
 | Scoring | first 3 sentences; whole-word matching after Unicode, digit, nukta and punctuation normalisation |
 | NLI | `MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7`; 4-sentence windows, top 3 by word overlap, threshold 0.5 |
@@ -360,9 +427,9 @@ XL-Sum Hindi test split (8,847 articles)
 | Statistics | paired bootstrap over the 100 articles, 2,000 resamples, seed 42, percentile 95% intervals |
 | Determinism | a rerun of 100 summaries reproduced them word for word |
 
-Summary counts: Llama 1B main 1,000 (5 levels x 2 prompts x 100) and stretch 400; each other model 600 (levels 0/40/80) and stretch 400. Total 5,400. Generation time per model: Llama 1B 2.6 h, 3B 2.0 h, 8B 2.6 h, Gemma 2B 2.5 h, Gemma 9B 5.3 h (sum of per-summary times, excluding model loading).
+Summary counts: Llama 1B main 1,000 (5 levels x 2 prompts x 100) and stretch 400; each other model 600 (levels 0/40/80) and stretch 400. Prompting extension: 600 per model for Llama 1B and Gemma 9B (3 levels x 2 prompts x 100). Total 6,600. Generation time per model: Llama 1B 2.6 h, 3B 2.0 h, 8B 2.6 h, Gemma 2B 2.5 h, Gemma 9B 5.3 h, plus 1.1 h (Llama 1B) and 3.1 h (Gemma 9B) for the prompting extension (sum of per-summary times, excluding model loading).
 
-## Appendix A. The two prompts
+## Appendix A. The prompts
 
 Both prompts are one user message in English (a 1B model follows English instructions far more reliably than Hindi ones); the summary is requested in Hindi. Source: `prompts.py`.
 
@@ -390,6 +457,34 @@ Article:
 ```
 
 Empty categories are left out. The checklist always lists the facts as written in the original (level-0) Hindi article.
+
+**Instructed (section 11):** the checklist prompt with these rules inserted after the task line:
+
+```
+Follow these rules:
+1. Use only information that is stated in the article. Do not add any fact, opinion, cause or background that the article does not contain.
+2. Write every name of a person, place or organisation exactly as it is spelled in the article. Do not re-spell or transliterate it differently.
+3. Copy numbers and dates exactly. Do not round, convert or estimate them.
+4. Keep who did what to whom exactly as in the article. Do not swap the roles of people, groups or countries.
+5. The article may mix Hindi with some English words. Read each English word with its normal meaning and write it in Hindi in the summary.
+6. Include the most important facts: the main event, who was involved, and the key numbers.
+```
+
+**Verified (section 11), second pass:** the instructed summary's first 3 sentences are the draft.
+
+```
+Below are a news article and a draft summary of it in Hindi. Check the draft sentence by sentence against the article:
+1. Remove any detail that the article does not state.
+2. Correct any name, number or date that differs from the article, using the article's spelling.
+3. Correct any sentence in which people, groups or countries have the wrong roles.
+Keep the summary to 2-3 sentences, in Hindi, in Devanagari script. If the draft is already correct, repeat it unchanged. Output only the final summary, with no explanation.
+
+Article:
+<article text, mixed at the given level>
+
+Draft summary:
+<first 3 sentences of the instructed summary>
+```
 
 ## Appendix B. Full results for all five models (levels 0/40/80)
 

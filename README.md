@@ -2,7 +2,7 @@
 
 As Hindi news text becomes more code-mixed with English, do LLM summaries lose facts or add wrong ones? And does putting an automatically extracted fact checklist in the prompt help? This is a 5-day, inference-only student experiment; the full plan is in [PLAN.md](PLAN.md), and every choice it left open is in [DECISIONS.md](DECISIONS.md).
 
-**Status:** Plan complete (Days 1-5). `REPORT.md` is final; slides: https://claude.ai/artifact/PhyZ5TeEszC3owEEK2NuNx (private until shared). Stretch (targeted vs random mixing) is done: 400 summaries generated on Kaggle, scored, and written up in REPORT.md section 6 and on the deck. Model-size extension (Llama-3.2-3B and Llama-3.1-8B; levels 0/40/80 + stretch, 1,000 summaries each) is done: generated on Kaggle notebooks `factindic-3b` / `factindic-8b`, scored, and written up in REPORT.md section 7 and on the deck. Second model family, Gemma 2 (2B, 9B; same scope), is done: Kaggle notebooks `factindic-gemma2b` / `factindic-gemma9b`, REPORT.md section 8 and a deck slide. Paired bootstrap intervals (levels 0 vs 80, checklist vs plain) now back the main claims. Checked against the mentor's brief (CSET 346 PJ_06): F1, compression and inference time are reported, `verify.py` adds an automatic sentence-level meaning check (NLI), and `content.py` adds content preservation against the human XL-Sum reference summaries (ROUGE-1/2/L, BERTScore). REPORT.md also holds the reproducibility table, the exact prompts, full appendix tables and a reference list, so it is the single source for the paper and slides. The IEEE-style paper is still to do. Source code, data and results are public on GitHub: https://github.com/Swapnil-Pramanik/FactIndic
+**Status:** Plan complete (Days 1-5). `REPORT.md` is final; slides: https://claude.ai/artifact/PhyZ5TeEszC3owEEK2NuNx (private until shared). Stretch (targeted vs random mixing) is done: 400 summaries generated on Kaggle, scored, and written up in REPORT.md section 6 and on the deck. Model-size extension (Llama-3.2-3B and Llama-3.1-8B; levels 0/40/80 + stretch, 1,000 summaries each) is done: generated on Kaggle notebooks `factindic-3b` / `factindic-8b`, scored, and written up in REPORT.md section 7 and on the deck. Second model family, Gemma 2 (2B, 9B; same scope), is done: Kaggle notebooks `factindic-gemma2b` / `factindic-gemma9b`, REPORT.md section 8 and a deck slide. Paired bootstrap intervals (levels 0 vs 80, checklist vs plain) now back the main claims. Checked against the mentor's brief (CSET 346 PJ_06): F1, compression and inference time are reported, `verify.py` adds an automatic sentence-level meaning check (NLI), and `content.py` adds content preservation against the human XL-Sum reference summaries (ROUGE-1/2/L, BERTScore). REPORT.md also holds the reproducibility table, the exact prompts, full appendix tables and a reference list, so it is the single source for the paper and slides. Prompting-strategy extension (2026-11-19): two more factuality-aware prompts, `instructed` (checklist + explicit rules from the brief) and `verified` (two-pass self-check), run on Llama 1B and Gemma 2 9B at levels 0/40/80 via Kaggle notebooks `factindic-prompt-1b` / `factindic-prompt-gemma9b`; scored by `prompting.py`; written up in REPORT.md section 11 (Limitations is now 12, Reproducibility 13). The IEEE-style paper is still to do. Source code, data and results are public on GitHub: https://github.com/Swapnil-Pramanik/FactIndic
 
 ## How to run (in order)
 
@@ -39,13 +39,18 @@ python generate.py --model 3b --stretch     # -> results/scale/3b/stretch_genera
 # Content preservation vs the human reference summary (ROUGE + BERTScore; downloads xlm-roberta-large, ~2 GB):
 .venv/bin/python content.py                 # all 5,400 summaries + Lead-1/Lead-3 -> results/content_scores.jsonl, content_metrics.csv, content_diffs.csv
 .venv/bin/python content.py --summarise     # rebuild the two tables only
+# Prompting-strategy extension (instructed + verified prompts; 1b and gemma9b, levels 0/40/80):
+python generate.py --prompting --model 1b   # on the T4 -> results/prompting/1b/generations.jsonl (600 rows; same for gemma9b)
+.venv/bin/python prompting.py               # facts + NLI + ROUGE/BERTScore for the new rows, compared with plain/checklist
+                                            #   -> results/prompting/<model>/scores.jsonl, prompting_metrics.csv, prompting_diffs.csv, prompting_chart.png
+.venv/bin/python prompting.py --summarise   # rebuild the tables and chart only
 ```
 
 Each script reads only the files written by the step before it, so any step can be rerun on its own.
 
 ### Running generation on Kaggle (or Colab)
 
-`generate.py` needs only `config.py`, `prompts.py`, `generate.py`, `data/checklists.jsonl` and `data/mixed.jsonl`.
+`generate.py` needs only `config.py`, `prompts.py`, `sentences.py`, `generate.py`, `data/checklists.jsonl` and `data/mixed.jsonl` (plus `data/stretch_mixed.jsonl` for `--stretch`).
 
 **On Colab:**
 
@@ -104,6 +109,7 @@ Without a CUDA GPU, `generate.py --dry-run` falls back to full precision on CPU/
 | F1, compression ratio, inference time (brief's metric list) | `score.py` (`add_f1`, `metrics_table`) | done |
 | Automatic meaning check: sentence-level NLI, validated against the hand tags | `verify.py` | done |
 | Content preservation vs the XL-Sum reference summary: ROUGE-1/2/L, BERTScore, Lead-1/Lead-3 baselines | `content.py` | done |
+| Prompting strategies: plain -> checklist -> instructed (explicit factuality rules) -> verified (two-pass self-check) | `prompts.py`, `generate.py --prompting`, `prompting.py` | done (2 x 600 rows; REPORT.md section 11) |
 | Report | `REPORT.md` | final (IEEE paper version still to do) |
 
 ## Architecture
@@ -112,12 +118,12 @@ Without a CUDA GPU, `generate.py --dry-run` falls back to full precision on CPU/
 XL-Sum (HF Parquet) ──> extract.py ──> data/checklists.jsonl ──> mix.py ──> data/mixed.jsonl
                           │ IndicNER                               │ Stanza POS + MUSE dict + wordfreq
                           │ regex numbers/dates                    │
-                                                                   v       prompts.py (plain / checklist)
+                                                                   v       prompts.py (plain / checklist / instructed / verified)
                                                                                    │
                   results/metrics.csv, chart.png <── score.py <── results/generations.jsonl <── generate.py (Llama-3.2-1B, T4)
 ```
 
-Stages talk only through JSONL/CSV files on disk. All settings live in `config.py`.
+`verify.py` (NLI), `content.py` (ROUGE/BERTScore) and `prompting.py` (the four-prompt comparison) read the score files and write their own tables. Stages talk only through JSONL/CSV files on disk. All settings live in `config.py`.
 
 ## Project structure
 
@@ -125,19 +131,21 @@ Stages talk only through JSONL/CSV files on disk. All settings live in `config.p
 PLAN.md                 # the fixed plan (do not change)
 DECISIONS.md            # every open choice, one line each
 README.md               # this file
-REPORT.md               # the write-up (all result numbers from results/metrics.csv)
+REPORT.md               # the write-up (result numbers come from the CSVs under results/)
 FUTURE_WORK.md          # ideas outside the plan's scope, not built
 requirements.txt        # pinned library versions
-FactIndic_colab.zip     # the 6 files generate.py needs (incl. data/stretch_mixed.jsonl) + requirements.txt, for Kaggle/Colab
-                        #   (rebuild it if config.py, prompts.py, generate.py or data/ change)
+FactIndic_colab.zip     # the 7 files generate.py needs (incl. sentences.py, data/stretch_mixed.jsonl) + requirements.txt, for Kaggle/Colab
+                        #   (rebuild it if config.py, prompts.py, sentences.py, generate.py or data/ change)
 config.py               # all settings and paths
 extract.py              # load + filter data, build checklists
 mix.py                  # code-mixing at each level
-prompts.py              # the plain and checklist prompt text
-generate.py             # Llama summaries (1B main; --model 3b/8b for the size extension), resumable (run on a T4)
+prompts.py              # the four prompts: plain, checklist, instructed, verified (second pass)
+sentences.py            # sentence splitter + first-3-sentence cut, shared by every script (no heavy imports, so it runs on Kaggle)
+generate.py             # summaries (Llama 1B main; --model for other sizes; --prompting for instructed/verified), resumable (run on a T4)
 score.py                # cut to 3 sentences, recall/precision/F1, tables + charts, model comparison
 verify.py               # sentence-level NLI meaning check (mDeBERTa XNLI), validated on the hand tags
 content.py              # ROUGE / BERTScore against the human XL-Sum reference summary
+prompting.py            # prompting-strategy extension: scores instructed/verified, compares all four prompts
 .gitignore              # ignores .venv, caches, data/dict (downloaded) and FactIndic_colab.zip (rebuilt)
 tests/checks.py         # plain-assert sanity checks
 data/
@@ -176,6 +184,13 @@ results/                # created by generate.py
     size_stretch_diffs.csv    # targeted - random per model/prompt/measure, paired, 95% bootstrap interval
     size_mixing_diffs.csv     # level 80 - level 0 and checklist - plain per model, paired, 95% bootstrap interval
     size_chart.png      # recall and precision vs mixing level, one column per model (5 models)
+  prompting/
+    <1b|gemma9b>/       # generations.jsonl (600: instructed + verified, levels 0/40/80; verified rows keep the draft
+                        #   and check_time_s), scores.jsonl (facts + NLI + ROUGE/BERTScore + changed_draft)
+    prompting_metrics.csv  # model x level x prompt for all four prompts
+    prompting_diffs.csv    # instructed/verified vs checklist/plain per level, and L80 - L0 per prompt; paired, 95% intervals
+    prompting_chart.png    # recall, unsupported facts, NLI contradictions vs level; one line per prompt, one row per model
+    list_marker_check.csv  # sensitivity check: new prompts rescored with list markers ("1.", "-") removed
 .venv/                  # local virtual environment (not part of the project)
 ```
 
@@ -216,8 +231,18 @@ Nothing planned. Ideas for later are in `FUTURE_WORK.md`.
 | Name | Responsibility |
 |---|---|
 | `TASK` | shared instruction (English): 2-3 sentence summary in Hindi, Devanagari, summary only |
+| `FACTUALITY_RULES` | the six rules of the `instructed` prompt (no unsupported info, exact names/numbers/dates, roles, code-mixed words, key facts) |
+| `VERIFY_TASK` | second-pass instruction of the `verified` prompt: check the draft against the article, remove/correct, output only the summary |
 | `format_checklist` | checklist as bullet lines ("Keep these key facts ... exactly"), empty categories skipped |
-| `build_messages` | one user message: task [+ checklist] + article |
+| `build_messages` | one user message: task [+ rules] [+ checklist] + article, for plain / checklist / instructed |
+| `build_verify_messages` | one user message: verify task + article + the 3-sentence draft |
+
+**`sentences.py`**
+
+| Name | Responsibility |
+|---|---|
+| `SENTENCE_RE` | sentence ends: danda or `.?!` followed by a space |
+| `first_sentences` | drop a lead-in line ending in ":", keep the first 3 sentences (used for scoring and for the verified draft) |
 
 **`generate.py`**
 
@@ -227,19 +252,20 @@ Nothing planned. Ideas for later are in `FUTURE_WORK.md`.
 | `load_model` | the chosen model (`config.MODELS`) in NF4 4-bit (float32 compute for `FLOAT32_MODELS`) with fp16 compute on CUDA; fp32 CPU/MPS fallback for code tests only |
 | `summarise` | chat template (pinned date), greedy decode, token counts, `hit_max_tokens`, time |
 | `drop_partial_line` / `load_done` | crash recovery: remove a half-written last line, collect finished keys |
+| `run_prompting` | `--prompting --model <tag>`: per (article, level) at `SCALE_LEVELS`, the instructed summary, then its 3-sentence cut checked in a second pass (verified; `time_s` = both passes) -> `results/prompting/<tag>/` |
 | `jobs` / `main` | fixed job order (article, level, prompt); skip done; append + fsync each row; `--dry-run` / `--stretch` pick the input and output files; `--model <tag>` (not 1b) writes to `results/scale/<tag>/` and keeps only `SCALE_LEVELS`; stops if the first 6 summaries have no Devanagari |
 
 **`score.py`**
 
 | Function | Responsibility |
 |---|---|
-| `first_sentences` | drop a lead-in line ending in ":", keep the first 3 sentences |
+| `first_sentences` | imported from `sentences.py` |
 | `match_key` / `contains` | normalise (Unicode, digits, nukta, case, punctuation) and match whole words |
 | `numbers_in` | set of normalised numbers in a text |
 | `recall` | share of checklist facts in the summary, overall and per type |
 | `precision` | facts found in the summary (NER + regex), which are not in the original article |
 | `score_all` | one score row per generation, plus length, compression, input English share |
-| `metrics_table` | means per (level, prompt) -> `metrics.csv` |
+| `metrics_table` | means per (level, prompt) -> `metrics.csv` (prompts ordered by `config.ALL_PROMPTS`) |
 | `without_latin` | precision ignoring "entities" with English letters -> `precision_no_latin` |
 | `plot` | two panels (recall, precision), one line per prompt, shared 0-1 axis -> `chart.png` |
 | `write_sheet` / `make_sheets` | blind 48-summary tagging sheet + key, 20-article checklist sheet (UTF-8 BOM, never overwrite) |
@@ -268,6 +294,15 @@ Nothing planned. Ideas for later are in `FUTURE_WORK.md`.
 | `lead` / `collect` | every model's main and stretch summaries (already cut to 3 sentences) plus Lead-1 / Lead-3 article baselines |
 | `score` | ROUGE-1/2/L F1 and BERTScore F1 (`xlm-roberta-large`, raw) against the article's `reference_summary` |
 | `summarise` | `content_metrics.csv` and paired intervals in `content_diffs.csv` (`--summarise` rebuilds without rescoring) |
+
+**`prompting.py`**
+
+| Function | Responsibility |
+|---|---|
+| `score_new` | fact scores (`score_all`), NLI (`verify.check_summaries`) and ROUGE/BERTScore (`content.score`) for every instructed/verified summary; `changed_draft` = did the check pass change the draft |
+| `all_scores` | the new scores plus the stored plain/checklist fact, NLI and content scores for the same model and levels |
+| `summarise` / `plot` | `prompting_metrics.csv`, paired `prompting_diffs.csv`, `prompting_chart.png` |
+| `list_marker_check` | `--list-check` (also run by default): rescore the new prompts with list markers stripped -> `list_marker_check.csv` (Llama 1B's check pass often answers as a numbered list) |
 
 ## Flow
 
@@ -300,6 +335,8 @@ Nothing planned. Ideas for later are in `FUTURE_WORK.md`.
  "hit_max_tokens": false, "time_s": 7.49, "model": "meta-llama/Llama-3.2-1B-Instruct", "setup": "cuda-4bit"}
 ```
 
+`results/prompting/<model>/generations.jsonl` uses the same fields with `prompt` = `instructed` or `verified`; verified rows add `draft` (the instructed summary's 3-sentence cut that was checked) and `check_time_s` (second pass only; `time_s` is both passes).
+
 `results/metrics.csv`, one row per (level, prompt): `n, input_english_share, recall, recall_entities, recall_numbers, precision, precision_no_latin, n_without_facts, unsupported_per_summary, summary_words, summary_latin_share, compression, output_tokens_raw, hit_max_tokens, time_s`.
 
 `data/stretch_mixed.jsonl`, one line per (article, condition): `{"id", "level": "targeted" | "random", "text", "n_replaced", "replaced", "fact_english": {Hindi word: English form}}`. `level` holds the condition so `generate.py` can treat these rows like the main ones.
@@ -327,7 +364,7 @@ See `requirements.txt` (tested with Python 3.12). Generation on the GPU also nee
 
 ## Configuration
 
-Everything is in `config.py`: seed, paths, dataset location, length filter, mixing levels, POS classes (nouns, adjectives), dictionary settings, NER model, threshold and entity stoplist, generation settings (model, 4-bit, fp16 compute, `MAX_NEW_TOKENS`=200, pinned `CHAT_DATE`, dry-run size and path), scoring settings (`SCORE_SENTENCES`, output paths, chart colours), and manual-check settings (tag levels, 8 articles, tag categories, sheet paths), and stretch settings (`STRETCH_NAME_SIMILARITY`, conditions, paths), NLI settings (`NLI_MODEL`, window size, top windows, threshold, paths), content settings (`CONTENT_BERT_MODEL`, `CONTENT_BATCH`, the `content_*` paths), and model-size settings (`MODELS`, `SCALE_LEVELS`, `SCALE_DIR`, the `size_*` paths, `BOOTSTRAP_SAMPLES`, `FLOAT32_MODELS` (Gemma: float32 compute), and `model_paths(tag)`, which gives each model's input and output files). No secrets are stored in the repo: the Hugging Face token lives only in the local HF cache after `hf auth login` (on Colab/Kaggle, use their secrets feature, never paste it into a notebook cell).
+Everything is in `config.py`: seed, paths, dataset location, length filter, mixing levels, POS classes (nouns, adjectives), dictionary settings, NER model, threshold and entity stoplist, generation settings (model, 4-bit, fp16 compute, `MAX_NEW_TOKENS`=200, `PROMPTS`, pinned `CHAT_DATE`, dry-run size and path), prompting-extension settings (`PROMPTING_PROMPTS`, `ALL_PROMPTS`, `PROMPTING_MODELS`, `PROMPTING_DIR`, the `prompting_*` paths, `PROMPT_COLORS_ALL`), scoring settings (`SCORE_SENTENCES`, output paths, chart colours), and manual-check settings (tag levels, 8 articles, tag categories, sheet paths), and stretch settings (`STRETCH_NAME_SIMILARITY`, conditions, paths), NLI settings (`NLI_MODEL`, window size, top windows, threshold, paths), content settings (`CONTENT_BERT_MODEL`, `CONTENT_BATCH`, the `content_*` paths), and model-size settings (`MODELS`, `SCALE_LEVELS`, `SCALE_DIR`, the `size_*` paths, `BOOTSTRAP_SAMPLES`, `FLOAT32_MODELS` (Gemma: float32 compute), and `model_paths(tag)`, which gives each model's input and output files). No secrets are stored in the repo: the Hugging Face token lives only in the local HF cache after `hf auth login` (on Colab/Kaggle, use their secrets feature, never paste it into a notebook cell).
 
 ## Repository and data licences
 

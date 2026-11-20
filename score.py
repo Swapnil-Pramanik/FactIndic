@@ -13,21 +13,9 @@ import numpy as np
 import pandas as pd
 
 import config
-from extract import (SENTENCE_RE, find_dates, find_entities, find_numbers, load_ner,
+from sentences import first_sentences
+from extract import (find_dates, find_entities, find_numbers, load_ner,
                      normalize_digits, normalize_number, normalize_text)
-
-
-def first_sentences(text, n=config.SCORE_SENTENCES):
-    """Keep the first n sentences of a summary (line breaks also end a sentence)."""
-    lines = text.strip().split("\n")
-    # 25 summaries open with a lead-in such as "हिंदी में इस खबर का संक्षेप निम्नलिखित है:"
-    # ("here is the summary:"). It is not part of the summary, so it is dropped.
-    if lines[0].strip().endswith(":"):
-        lines = lines[1:]
-    sentences = []
-    for line in lines:
-        sentences += [m.group().strip() for m in SENTENCE_RE.finditer(line) if m.group().strip()]
-    return " ".join(sentences[:n])
 
 
 def match_key(text):
@@ -140,7 +128,7 @@ def metrics_table(scores):
     """Average each measure per (level, prompt). Means skip summaries where a measure is undefined."""
     df = add_f1(pd.DataFrame(scores))
     # An ordered category makes the table list "plain" before "checklist" within each level.
-    df["prompt"] = pd.Categorical(df["prompt"], categories=config.PROMPTS, ordered=True)
+    df["prompt"] = pd.Categorical(df["prompt"], categories=config.ALL_PROMPTS, ordered=True)
     table = df.groupby(["level", "prompt"], observed=True).agg(
         n=("id", "size"),
         input_english_share=("input_english_share", "mean"),

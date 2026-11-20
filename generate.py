@@ -4,6 +4,8 @@ Usage:  python generate.py            # full run, 100 articles x 5 levels x 2 pr
         python generate.py --dry-run  # first DRY_RUN_ARTICLES articles, to results/dry_run.jsonl
         python generate.py --stretch  # targeted vs random mixing, 100 x 2 x 2 -> results/stretch_generations.jsonl
         python generate.py --model 3b [--stretch]  # larger model, levels SCALE_LEVELS only -> results/scale/3b/
+        python generate.py --prompting --model gemma9b  # instructed + verified prompts, levels SCALE_LEVELS
+                                                         # -> results/prompting/gemma9b/generations.jsonl
 Rerunning either command skips rows already on disk, so a crashed run just continues.
 """
 
@@ -19,7 +21,8 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 import config
-from prompts import build_messages
+from prompts import build_messages, build_verify_messages
+from sentences import first_sentences
 
 
 def set_seed(seed):
@@ -94,15 +97,69 @@ def recent_summaries(path, n):
     return [json.loads(line)["summary"] for line in open(path, encoding="utf-8").readlines()[-n:]]
 
 
-def jobs(mixed_path, n_articles=None, levels=None):
+def jobs(mixed_path, n_articles=None, levels=None, prompts=config.PROMPTS):
     """Every (mixed row, prompt, checklist) to generate, in a fixed order; `levels` keeps only those levels."""
     checklists = {a["id"]: a["checklist"] for a in map(json.loads, open(config.CHECKLISTS_PATH, encoding="utf-8"))}
     ids = list(checklists)[:n_articles]
     rows = [r for r in map(json.loads, open(mixed_path, encoding="utf-8"))
             if r["id"] in ids and (levels is None or r["level"] in levels)]
     for row in rows:
-        for prompt in config.PROMPTS:
+        for prompt in prompts:
             yield row, prompt, checklists[row["id"]]
+
+
+def write_row(f, record):
+    """Append one row and flush it to disk, so a crash loses at most the row being generated."""
+    f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    f.flush()
+    os.fsync(f.fileno())
+
+
+def run_prompting(tag):
+    """Instructed and verified summaries for one model at SCALE_LEVELS -> results/prompting/<tag>/.
+
+    For each (article, level) the instructed summary is generated first; its first 3 sentences
+    (the same cut as scoring) are the draft for the verified prompt's second pass. The verified
+    row's time_s is draft + check time, so it reports the full cost of the two-pass strategy."""
+    out_path = config.PROMPTING_DIR / tag / "generations.jsonl"
+    rows = [row for row, _, _ in jobs(config.MIXED_PATH, None, config.SCALE_LEVELS, prompts=["instructed"])]
+    checklists = {a["id"]: a["checklist"] for a in map(json.loads, open(config.CHECKLISTS_PATH, encoding="utf-8"))}
+    done = load_done(out_path)
+    drafts = {}
+    if out_path.exists():
+        drafts = {(r["id"], r["level"]): r for r in map(json.loads, open(out_path, encoding="utf-8"))
+                  if r["prompt"] == "instructed"}
+    todo = [row for row in rows if any((row["id"], row["level"], p) not in done for p in config.PROMPTING_PROMPTS)]
+    print(f"{len(done)} rows already done, {len(todo)} articles x levels to go -> {out_path}")
+    if not todo:
+        return
+    set_seed(config.SEED)
+    model_name = config.MODELS[tag]
+    tokenizer, model, setup = load_model(model_name, float32=tag in config.FLOAT32_MODELS)
+    if not setup.startswith("cuda-4bit"):
+        raise SystemExit("The prompting run must use the T4 with 4-bit loading.")
+    print(f"model {model_name} on {setup}")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "a", encoding="utf-8") as f:
+        for i, row in enumerate(todo, 1):
+            key = (row["id"], row["level"])
+            if (*key, "instructed") not in done:
+                result = summarise(tokenizer, model, build_messages("instructed", row["text"], checklists[row["id"]]))
+                drafts[key] = {"id": row["id"], "level": row["level"], "prompt": "instructed", **result,
+                               "model": model_name, "setup": setup}
+                write_row(f, drafts[key])
+            draft = drafts[key]
+            if (*key, "verified") not in done:
+                draft_text = first_sentences(draft["summary"])
+                result = summarise(tokenizer, model, build_verify_messages(row["text"], draft_text))
+                result["check_time_s"] = result["time_s"]
+                result["time_s"] = round(draft["time_s"] + result["time_s"], 2)  # full two-pass cost
+                write_row(f, {"id": row["id"], "level": row["level"], "prompt": "verified", **result,
+                                        "draft": draft_text, "model": model_name, "setup": setup})
+                print(f"[{i}/{len(todo)}] {row['id']} L{row['level']}: draft {draft['n_output_tokens']} tok, "
+                      f"check {result['n_output_tokens']} tok, {result['time_s']}s")
+            if i == 3 and not any(re.search(r"[\u0900-\u097F]", r) for r in recent_summaries(out_path, 6)):
+                raise SystemExit("The first summaries contain no Devanagari: the model output looks broken.")
 
 
 def main():
@@ -112,7 +169,11 @@ def main():
     parser.add_argument("--stretch", action="store_true", help="targeted vs random mixing (Day 5 stretch)")
     parser.add_argument("--model", choices=list(config.MODELS), default="1b",
                         help="model size; anything but 1b is the model-size extension (SCALE_LEVELS only)")
+    parser.add_argument("--prompting", action="store_true",
+                        help="the instructed and verified prompts (prompting-strategy extension)")
     args = parser.parse_args()
+    if args.prompting:
+        return run_prompting(args.model)
     model_name = config.MODELS[args.model]
     if args.stretch:
         # Stretch rows hold the condition ("targeted"/"random") in "level", so everything below is shared.

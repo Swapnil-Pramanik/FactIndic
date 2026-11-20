@@ -25,7 +25,7 @@ import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 import config
-from extract import SENTENCE_RE
+from sentences import SENTENCE_RE
 
 
 def sentences(text):

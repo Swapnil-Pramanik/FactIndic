@@ -65,10 +65,15 @@ def score(rows):
         s = scorer.score(refs[r["id"]], r["summary"])
         r.update({k: s[k].fmeasure for k in ["rouge1", "rouge2", "rougeL"]})
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-    _, _, f1 = bertscore([r["summary"] for r in rows], [refs[r["id"]] for r in rows],
+    # An empty summary (e.g. only a lead-in line) has no content: BERTScore 0, like its ROUGE.
+    # bert_score cannot embed an empty string with transformers 5, so those rows are skipped.
+    filled = [r for r in rows if r["summary"].strip()]
+    _, _, f1 = bertscore([r["summary"] for r in filled], [refs[r["id"]] for r in filled],
                          model_type=config.CONTENT_BERT_MODEL, batch_size=config.CONTENT_BATCH,
                          device=device, verbose=True)
-    for r, f in zip(rows, f1.tolist()):
+    for r in rows:
+        r["bertscore"] = 0.0
+    for r, f in zip(filled, f1.tolist()):
         r["bertscore"] = f
     return rows
 

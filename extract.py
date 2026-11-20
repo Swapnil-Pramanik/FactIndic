@@ -8,6 +8,7 @@ from datasets import load_dataset
 from indicnlp.normalize.indic_normalize import DevanagariNormalizer
 
 import config
+from sentences import SENTENCE_RE
 
 _normalizer = DevanagariNormalizer()
 
@@ -44,8 +45,6 @@ DATE_RE = re.compile(
 # A run of digits, optionally with commas or a decimal point between digits.
 # "2008." at a sentence end stays "2008" because a digit must follow the point.
 NUMBER_RE = re.compile(rf"{D}+(?:[.,]{D}+)*")
-# Sentence ends: Hindi danda or Western punctuation followed by a space.
-SENTENCE_RE = re.compile(r".+?(?:[.।?!](?=\s)|$)", re.S)
 
 
 def find_dates(text):
@@ -116,6 +115,8 @@ def find_entities(text, ner):
     # Whole articles can exceed the model's 512-token limit, sentences never do.
     sentences = [m for m in SENTENCE_RE.finditer(text) if m.group().strip()]
     spans = []
+    if not sentences:  # an empty summary (the NER pipeline rejects an empty batch)
+        return spans
     for sent, tokens in zip(sentences, ner([m.group() for m in sentences])):
         for start, end, kind, score in merge_words(word_labels(sent.group(), tokens)):
             start, end = trim(text, sent.start() + start, sent.start() + end)

@@ -93,6 +93,20 @@ LOAD_IN_4BIT = True       # NF4 weights via bitsandbytes; needs an NVIDIA GPU
 COMPUTE_DTYPE = "float16"  # the T4 has no bfloat16 support
 MAX_NEW_TOKENS = 200      # a 2-3 sentence Hindi summary needs ~80-150 tokens
 PROMPTS = ["plain", "checklist"]
+
+# --- Prompting-strategy extension (2026-11-19) ---
+# Two more factuality-aware prompts (see prompts.py): "instructed" = checklist + explicit rules,
+# "verified" = an instructed draft checked and revised by the same model in a second pass.
+# Run on the weakest and the strongest model, levels 0/40/80; plain and checklist come from
+# the existing runs on the same articles, so all four prompts are compared article by article.
+PROMPTING_PROMPTS = ["instructed", "verified"]
+ALL_PROMPTS = PROMPTS + PROMPTING_PROMPTS   # table order
+PROMPTING_MODELS = ["1b", "gemma9b"]
+PROMPTING_DIR = RESULTS_DIR / "prompting"   # results/prompting/<model>/generations.jsonl, scores.jsonl
+PROMPTING_METRICS_PATH = PROMPTING_DIR / "prompting_metrics.csv"   # model x level x prompt, all four prompts
+PROMPTING_DIFFS_PATH = PROMPTING_DIR / "prompting_diffs.csv"       # each prompt vs checklist and plain, paired
+PROMPT_COLORS_ALL = {"plain": "#2a78d6", "checklist": "#eb6834", "instructed": "#1f9e6e", "verified": "#8a4fc7"}
+PROMPTING_CHART_PATH = PROMPTING_DIR / "prompting_chart.png"
 # Llama 3.2's chat template writes today's date into every prompt. Pinning it keeps
 # the prompts identical no matter which day the script runs.
 CHAT_DATE = "01 Nov 2026"
