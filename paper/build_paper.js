@@ -126,8 +126,9 @@ const body = [
   BULLET("•", "a human error analysis showing that role swaps, which string metrics cannot see, are the most common error, and an NLI check validated against it."),
 
   H1("II", "Related Work"),
-  P("_Factuality in summarization._ Maynez et al. [1] showed that abstractive summarizers frequently hallucinate content not supported by the source. FactCC [2] and SummaC [5] detect such inconsistencies with trained classifiers and natural language inference (NLI), respectively. We use a sentence-level NLI check in the spirit of SummaC, together with simpler, interpretable fact matching."),
+  P("_Factuality in summarization._ Maynez et al. [1] showed that abstractive summarizers frequently hallucinate content not supported by the source. FactCC [2] detects such inconsistencies with a classifier trained on synthetic errors."),
   P("_Code-mixing._ GLUECoS [3] and LinCE [4] benchmark models on code-switched tasks such as language identification, tagging and sentiment, but not on summarization faithfulness. We do not use naturally code-mixed text; instead we generate graded mixing from monolingual news, which lets us measure the effect of the amount of mixing on otherwise identical input."),
+  P("_NLI-based checking._ SummaC [5] detects inconsistent summaries with natural language inference (NLI) between source and summary sentences. We use a sentence-level NLI check in the same spirit, together with simpler, interpretable fact matching."),
   P("_Hindi summarization and LLMs._ XL-Sum [6] provides BBC news articles and one-line reference summaries in 44 languages, including Hindi. A recent Hindi LLM benchmark [7] ranked Gemma-2-9b-it the most capable small open model, which motivated our choice of the Gemma 2 family alongside Llama."),
 
   H1("III", "Data and Controlled Code-Mixing"),
